@@ -1,0 +1,236 @@
+# Column metadata definitions for 2010/2020 Census geographies.
+# Derived from Census 2020PL tech docs [1], but with some descriptions tweaked
+# to be generic across layers. 
+#
+# This configuration is intended to be used as a Jinja2 template, as Census column
+# definitions are more or less the same between most of the sources we use in the
+# 2010 and 2020 Census.
+#
+# Variables:
+#   * yr - Two-digit Census vintage (10, 20)
+#   * year - Four-digit Census vintage (2010, 2020)
+#
+# [1] https://www2.census.gov/geo/pdfs/maps-data/data/tiger/tgrshp2020pl/TGRSHP2020PL_TechDoc.pdf
+columns:
+- source: NAME{{yr}}
+  target: name
+  aliases: ["name{{yr}}"]
+  type: str
+  kind: identifier
+  description: {{year}} Census AIANNH area name 
+- source: AIANNHNS{{yr}}
+  target: aiannh_gnis_code
+  aliases: ["aiannhns", "aiannhns{{yr}}"]
+  type: str
+  kind: identifier
+  description: >
+    {{year}} Census AIANNH area GNIS code.
+    
+    [GNIS](https://www.usgs.gov/tools/geographic-names-information-system-gnis) is a standard published by the USGS (United States Geological Survey).
+- source: NAMELSAD{{yr}}
+  target: full_name
+  aliases: ["namelsad", "namelsad{{yr}}"]
+  type: str
+  kind: identifier
+  description: {{year}} Census name and translated legal/statistical area description 
+- source: AIANNHR10
+  target: aiannh_area_recognition
+  aliases: ["aiannhr", "aiannhr{{yr}}"]
+  type: str
+  kind: categorical
+  description: {{year}} Census AIANNH area federal/state recognition flag
+- source: FUNCSTAT{{yr}}
+  target: functional_status
+  aliases: ["funcstat", "funcstat{{yr}}"]
+  type: str
+  kind: categorical
+  description: >
+    {{year}} Census functional status.
+
+    Values:
+    * A - Active government providing primary general-purpose functions, or active entity (federally recognized entities only)
+    * B - Active government that is partially consolidated with another government but with separate officials providing primary general-purpose functions 
+    * C - Active government consolidated with another government with a single set of officials 
+    * E - Active government providing specialpurpose functions
+    * F - Fictitious Entity created to fill the Census Bureau's geographic hierarchy
+    * G - Active government that is subordinate to another unit of govt.
+    * I - Inactive governmental unit that has the power to provide primary special-purpose functions
+    * L - Inactive, nonfunctioning legal real property entity with potential quasi-legal administrative functions
+    * M - Active legal real property entity with quasi-legal functions
+    * N - Nonfunctioning legal entity
+    * S - Statistical Entity
+    * T - Active State-recognized entity
+
+    See the [functional status codes reference](https://www2.census.gov/geo/pdfs/reference/FunctionalStatusCodes.pdf).
+- source: ALAND{{yr}}
+  target: area_land
+  aliases: ["aland", "aland{{yr}}"]
+  type: int
+  kind: area 
+  description: {{year}} Census land area (square meters)
+- source: AWATER10
+  target: area_water
+  aliases: ["awater", "awater{{yr}}"]
+  type: int
+  kind: area 
+  description: {{year}} Census water area (square meters)
+- source: PARTFLG{{yr}}
+  target: part_flag
+  aliases: ["partflg", "partflg{{yr}}"]
+  type: str
+  kind: categorical 
+  description: >
+    Part Flag identifying if all or part of the entity is within the file.
+
+    Census geographies are imported to CherryDB at the state level, so this flag essentially indicates whether the entity spans multiple states.
+- source: UR{{yr}}
+  target: urban_rural
+  aliases: ["ur", "ur{{yr}}"]
+  type: str
+  kind: categorical 
+  description: {{year}} Census urban/rural indicator
+- source: UACE{{yr}}
+- source: UATYPE{{yr}}
+- source: LSAD{{yr}}
+  description: >
+  Legal/Statistical Area Description (LSAD) code.
+
+  For more on the LSAD abbreviations and their associated geographic entities, see the [LSAD codes reference](https://www2.census.gov/geo/pdfs/reference/LSADCodes.pdf).
+
+  Values:
+  * 00 - N/A (no description)
+  * 03 - City and Borough (suffix)
+  * 04 - Borough (suffix)
+  * 05 - Census Area (suffix)
+  * 06 - Balance of County EC Place
+  * 06 - County (suffix)
+  * 07 - District (suffix)
+  * 10 - Island (suffix)
+  * 12 - Municipality (suffix)
+  * 13 - Municipio (suffix)
+  * 15 - Parish (suffix)
+  * 20 - barrio (suffix)
+  * 21 - borough (suffix)
+  * 22 - CCD (suffix)
+  * 23 - census subarea (suffix)
+  * 24 - census subdistrict (suffix)
+  * 25 - city (suffix)
+  * 26 - county (suffix)
+  * 27 - district (suffix)
+  * 28 - District (prefix)
+  * 29 - precinct (suffix)
+  * 30 - Precinct (prefix)
+  * 31 - gore (suffix)
+  * 32 - grant (suffix)
+  * 36 - location (suffix)
+  * 37 - municipality (suffix)
+  * 39 - plantation (suffix)
+  * 41 - barrio-pueblo (suffix)
+  * 42 - purchase (suffix)
+  * 43 - town (suffix)
+  * 44 - township (suffix)
+  * 45 - Township (prefix)
+  * 46 - UT (suffix)
+  * 47 - village (suffix)
+  * 49 - charter township (suffix)
+  * 51 - subbarrio (suffix)
+  * 53 - city and borough (suffix)
+  * 55 - comunidad (suffix)
+  * 57 - CDP (suffix)
+  * 62 - zona urbana (suffix)
+  * 68 - Region (suffix)
+  * 69 - Division (suffix)
+  * 70 - UGA (suffix)
+  * 71 - CMSA
+  * 72 - MSA
+  * 73 - Primary Metropolitan Statistical Area
+  * 74 - New England County Metropolitan Area
+  * 75 - Urbanized Area (suffix)
+  * 76 - Urban Cluster (suffix)
+  * 77 - Alaska Native Regional Corporation (suffix)
+  * 78 - Hawaiian Home Land (suffix)
+  * 79 - ANVSA (suffix)
+  * 80 - TDSA (suffix)
+  * 81 - Colony (suffix)
+  * 82 - Community (suffix)
+  * 83 - joint-use area (suffix)
+  * 84 - Pueblo (suffix)
+  * 85 - Rancheria (suffix)
+  * 86 - Reservation (suffix)
+  * 87 - Reserve (suffix)
+  * 88 - OTSA (suffix)
+  * 89 - Trust Land (suffix)
+  * 90 - joint-use OTSA (suffix)
+  * 91 - Ranch (suffix)
+  * 92 - SDTSA (suffix)
+  * 93 - Indian Village (suffix)
+  * 94 - Village (suffix)
+  * 95 - Indian Community (suffix)
+  * 96 - Indian Reservation (suffix)
+  * 97 - Indian Rancheria (suffix)
+  * 98 - Indian Colony (suffix)
+  * 99 - Pueblo de
+  * 9C - Pueblo of
+  * 9D - Ranch Reservation (suffix)
+  * 9E - Rancheria Reservation (suffix)
+  * 9F - Ranches (suffix)
+  * B1 - Balance of County
+  * B2 - Balance of Parish
+  * B3 - Balance of Borough
+  * B4 - Balance of Census Area
+  * B5 - town (balance)
+  * B6 - township (balance)
+  * B7 - charter township (balance)
+  * B8 - Balance of
+  * BG - Block Group (prefix)
+  * BI - Balance of Island
+  * BK - Block (prefix)
+  * BL - (balance)
+  * C1 - Congressional District (at Large) (actual text)
+  * C2 - Congressional District (prefix)
+  * C3 - Resident Commissioner District (at Large) (actual text)
+  * C4 - Delegate District (at Large) (actual text)
+  * C5 - No Representative (actual text)
+  * CB - consolidated government (balance)
+  * CG - consolidated government (suffix)
+  * CN - corporation (suffix)
+  * CR - Commercial Region (suffix)
+  * CT - Census Tract (prefix)
+  * IB - Tribal Block Group (prefix)
+  * IT - Tribal Census Tract (prefix)
+  * L1 - Ward (prefix)
+  * L2 - Senatorial District (suffix)
+  * L3 - Assembly District (prefix)
+  * L4 - General Assembly District (prefix)
+  * L5 - State Legislative District (prefix)
+  * L6 - State Legislative Subdistrict (prefix)
+  * L7 - District
+  * LL - State House District (prefix)
+  * LU - State Senate District (prefix)
+  * M0 - CSA (suffix)
+  * M1 - Metro Area (suffix)
+  * M2 - Micro Area (suffix)
+  * M3 - Metro Division (suffix)
+  * M4 - Combined NECTA (suffix)
+  * M5 - Metropolitan NECTA (suffix)
+  * M6 - Micropolitan NECTA (suffix)
+  * M7 - NECTA Division (suffix)
+  * MB - metropolitan government (balance)
+  * MG - metropolitan government (suffix)
+  * MT - metro government (suffix)
+  * P1 - SuperPUMA (prefix)
+  * P5 - PUMA (prefix)
+  * T1 - Area (suffix)
+  * T2 - Chapter (suffix)
+  * T3 - Segment (suffix)
+  * TA - Administrative Area (suffix)
+  * TB - Addition (suffix)
+  * TC - County District (prefix)
+  * TZ - TAZ (prefix)
+  * UB - unified government (balance)
+  * UC - urban county (suffix)
+  * UG - unified government (suffix)
+  * V1 - Voting District (prefix)
+  * V2 - Voting District (suffix)
+  * Z3 - ZCTA3 (suffix)
+  * Z5 - ZCTA5 (suffix)
