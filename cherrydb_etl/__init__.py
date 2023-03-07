@@ -7,6 +7,16 @@ from typing import Tuple
 
 import geopandas as gpd
 import httpx
+from cherrydb.schemas import ColumnKind, ColumnType
+from pydantic import BaseModel, Field
+
+COLUMN_TYPE_TO_PY_TYPE = {
+    ColumnType.BOOL: bool,
+    ColumnType.FLOAT: float,
+    ColumnType.INT: int,
+    ColumnType.STR: str,
+    # ColumnType.JSON excluded (does not map to a fixed Python type)
+}
 
 log = logging.getLogger()
 
@@ -35,3 +45,34 @@ def download_dataframe_with_hash(url: str) -> Tuple[gpd.GeoDataFrame, str]:
 def pathify(name: str) -> str:
     """Converts a pretty name to a root-level path."""
     return name.strip().lower().replace(" ", "-").replace(".", "")
+
+
+class ColumnConfig(BaseModel):
+    """Import configuration for a column."""
+
+    class Config:
+        frozen = True
+
+    source: str
+    target: str
+    aliases: list[str] = Field(default_factory=list)
+    kind: ColumnKind
+    type: ColumnType
+    description: str
+
+
+class TabularConfig(BaseModel):
+    """Import configuration for a tabular dataset."""
+
+    class Config:
+        frozen = True
+
+    columns: list[ColumnConfig]
+
+    def source_dtypes(self):
+        """Returns Pandas type annotations for the source DataFrame."""
+        return {
+            column.source: COLUMN_TYPE_TO_PY_TYPE[column.type]
+            for column in self.columns
+            if column in COLUMN_TYPE_TO_PY_TYPE
+        }
