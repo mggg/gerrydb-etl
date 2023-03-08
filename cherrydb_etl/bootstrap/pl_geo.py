@@ -3,14 +3,17 @@ import logging
 from pathlib import Path
 
 import click
+import yaml
 from cherrydb import CherryDB
+from jinja2 import Template
+from shapely import Point
 
-from cherrydb_etl import config_logger
+from cherrydb_etl import (TabularConfig, config_logger,
+                          download_dataframe_with_hash)
 
 log = logging.getLogger()
 
 
-NOTES = """Loaded by"""
 LEVELS = (
     ### central spine ###
     "block",
@@ -24,7 +27,7 @@ LEVELS = (
     "cousub",
     "aiannh",  # American Indian/Alaska Native/Native Hawaiian Areas
 )
-
+SOURCE_URL = "https://www2.census.gov/geo/tiger/TIGER2020PL/"
 LAYER_URLS = {
     "block/2010": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/TABBLOCK/2010/tl_2020_{fips}_tabblock10.zip",
     "block/2020": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/TABBLOCK/2020/tl_2020_{fips}_tabblock20.zip",
@@ -63,13 +66,48 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         * A `GeoLayer` with path `<level>/<year>` exists in the namespace.
     """
     db = CherryDB(namespace=namespace)
-    loc = db.localities[fips]
-    layer = db.geo_layers[f"/{level}/{year}"]
+    root_loc = db.localities[fips]
+    layer = db.geo_layers[level]
 
-    with db.context(notes=""):
+    with open(COLUMN_CONFIG_PATH) as config_fp:
+        config_template = Template(config_fp.read())
+    rendered_config = config_template.render(yr=year[2:], year=year)
+    config = TabularConfig(**yaml.safe_load(rendered_config))
+    columns = {col.source: db.columns[col.target] for col in config.columns}
+
+    layer_url = LAYER_URLS[f"{level}/{year}"].format(fips=fips)
+    index_col = "GEOID" + year[2:]
+    layer_gdf, layer_hash = download_dataframe_with_hash(
+        url=layer_url,
+        dtypes=config.source_dtypes(),
+    ).set_index(index_col)
+
+    internal_latitudes = layer_gdf[f"INTPTLAT{year[2:]}"].apply(float)
+    internal_longitudes = layer_gdf[f"INTPTLON{year[2:]}"].apply(float)
+    layer_gdf["internal_point"] = [
+        Point(long, lat) for long, lat in zip(internal_longitudes, internal_latitudes)
+    ]
+
+    with db.context(
+        notes=(
+            f"Loaded by ETL script {__name__} from {year} U.S. Census {level} "
+            f"shapefile {layer_url} (SHA256: {layer_hash.hexdigest()})"
+        )
+    ) as ctx:
+        ctx.load_dataframe(
+            df=layer_gdf,
+            columns=columns,
+            create_geo=True,
+            locality=root_loc,
+            layer=layer,
+        )
+
+    county_col = "COUNTYFP" + year[2:]
+    if county_col in layer_gdf.columns:
+        # TODO: group index by county and update county locality mappings
         pass
 
 
 if __name__ == "__main__":
-    config_logger()
+    config_logger(log)
     load_geo()

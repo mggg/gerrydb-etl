@@ -6,6 +6,7 @@ from collections import Counter
 import click
 import us
 from cherrydb import CherryDB
+from cherrydb.schemas import LocalityCreate
 from utm import from_latlon
 
 from cherrydb_etl import config_logger, download_dataframe_with_hash, pathify
@@ -93,17 +94,26 @@ def load_localities():
             canonical_path="us",
             name="United States of America",
         )
+
+        state_like_locs = []
         for state in state_like:
             log.info("Creating locality for state/territory %s...", state.name)
             state_gdf = counties_gdf[counties_gdf["STATEFP"] == state.fips]
             zone = identify_utm_zone(state_gdf)
-            ctx.localities.create(
-                canonical_path=pathify(state.name),
-                parent_path="us",
-                name=state.name,
-                aliases=[state.fips, state.abbr.lower()],
-                default_proj=utm_zone_projtext(zone),
+            state_like_locs.append(
+                LocalityCreate(
+                    canonical_path=pathify(state.name),
+                    parent_path="us",
+                    name=state.name,
+                    aliases=[state.fips, state.abbr.lower()],
+                    default_proj=utm_zone_projtext(zone),
+                )
             )
+
+        log.info(
+            "Pushing localities for %d states/territories...", len(state_like_locs)
+        )
+        ctx.localities.create_bulk(state_like_locs)
 
     state_fips_to_name = {state.fips: state.name for state in state_like}
     state_fips_to_abbr = {state.fips: state.abbr for state in state_like}
@@ -118,6 +128,7 @@ def load_localities():
     with db.context(
         notes=COUNTY_NOTES + f" (SHA256: {counties_hash.hexdigest()})"
     ) as ctx:
+        county_locs = []
         for row in counties_gdf.itertuples():
             log.info("Creating locality for %s...", row.full_name)
             zone = utm_of_point(row.geometry.centroid)
@@ -128,20 +139,22 @@ def load_localities():
                 row.GEOID, [f"{pathify(row.state_abbr)}/{pathify(row.NAME)}"]
             ) + [row.GEOID]
 
-            ctx.localities.create(
-                canonical_path=canonical_path,
-                parent_path=pathify(row.state_name),
-                name=row.full_name,
-                aliases=aliases,
-                default_proj=utm_zone_projtext(zone),
+            county_locs.append(
+                LocalityCreate(
+                    canonical_path=canonical_path,
+                    parent_path=pathify(row.state_name),
+                    name=row.full_name,
+                    aliases=aliases,
+                    default_proj=utm_zone_projtext(zone),
+                )
             )
+
+        log.info(
+            "Pushing localities for %d counties/county equivalents...", len(county_locs)
+        )
+        ctx.localities.create_bulk(county_locs)
 
 
 if __name__ == "__main__":
     config_logger(log)
     load_localities()
-
-# Ideas:
-#   * self-test framework
-#   * locality bulk loading (simple async, kind of a hack)
-#   * @if_not_exists / idempotency at the ETL framework level?

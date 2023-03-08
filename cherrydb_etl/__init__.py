@@ -30,7 +30,9 @@ def config_logger(logger: logging.Logger) -> None:
     logger.addHandler(handler)
 
 
-def download_dataframe_with_hash(url: str) -> Tuple[gpd.GeoDataFrame, str]:
+def download_dataframe_with_hash(
+    url: str, *args, **kwargs
+) -> Tuple[gpd.GeoDataFrame, str]:
     """Returns a (Geo)DataFrame and a file hash from a downloaded file."""
     log.info("Downloading %s...", url)
     response = httpx.get(url)
@@ -39,7 +41,7 @@ def download_dataframe_with_hash(url: str) -> Tuple[gpd.GeoDataFrame, str]:
     content = BytesIO(response.content)
     content_hash = sha256(content.getbuffer())
     log.info("Downloaded %s (SHA256: %s)", url, content_hash.hexdigest())
-    return gpd.read_file(content), content_hash
+    return gpd.read_file(content, *args, **kwargs), content_hash
 
 
 def pathify(name: str) -> str:
@@ -68,11 +70,12 @@ class TabularConfig(BaseModel):
         frozen = True
 
     columns: list[ColumnConfig]
+    source_url: str | None = None
 
     def source_dtypes(self):
         """Returns Pandas type annotations for the source DataFrame."""
         return {
             column.source: COLUMN_TYPE_TO_PY_TYPE[column.type]
             for column in self.columns
-            if column in COLUMN_TYPE_TO_PY_TYPE
+            if column.type in COLUMN_TYPE_TO_PY_TYPE
         }
