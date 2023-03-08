@@ -73,14 +73,26 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         config_template = Template(config_fp.read())
     rendered_config = config_template.render(yr=year[2:], year=year)
     config = TabularConfig(**yaml.safe_load(rendered_config))
-    columns = {col.source: db.columns[col.target] for col in config.columns}
 
     layer_url = LAYER_URLS[f"{level}/{year}"].format(fips=fips)
     index_col = "GEOID" + year[2:]
+    county_col = "COUNTYFP" + year[2:]
     layer_gdf, layer_hash = download_dataframe_with_hash(
         url=layer_url,
         dtypes=config.source_dtypes(),
-    ).set_index(index_col)
+    )
+    geos_by_county = (
+        dict(layer_gdf.groupby(county_col)[index_col].apply(list))
+        if county_col in layer_gdf.columns
+        else {}
+    )
+    layer_gdf = layer_gdf.set_index(index_col)
+
+    columns = {
+        col.source: db.columns[col.target]
+        for col in config.columns
+        if col.source in layer_gdf.columns
+    }
 
     internal_latitudes = layer_gdf[f"INTPTLAT{year[2:]}"].apply(float)
     internal_longitudes = layer_gdf[f"INTPTLON{year[2:]}"].apply(float)
@@ -101,11 +113,12 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
             locality=root_loc,
             layer=layer,
         )
-
-    county_col = "COUNTYFP" + year[2:]
-    if county_col in layer_gdf.columns:
-        # TODO: group index by county and update county locality mappings
-        pass
+        for county_fips, county_geos in geos_by_county.items():
+            full_fips = fips + county_fips
+            log.info("Mapping units for county (equivalent) %s...", full_fips)
+            ctx.geo_layers.map_locality(
+                layer=layer, locality=full_fips, geographies=county_geos
+            )
 
 
 if __name__ == "__main__":

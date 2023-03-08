@@ -17,7 +17,7 @@ COUNTIES_URL = (
     "https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip"
 )
 
-NOTE_PREFIX = "Loaded by {__name__} ETL script from the"
+NOTE_PREFIX = f"Loaded by ETL script {__file__} from the"
 STATE_NOTES = f"{NOTE_PREFIX} `us` package (https://github.com/unitedstates/python-us)"
 COUNTY_NOTES = f"{NOTE_PREFIX} 2020 U.S. Census counties shapefile ({COUNTIES_URL})"
 

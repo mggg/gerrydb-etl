@@ -1,13 +1,13 @@
 #!/bin/bash
 
-### Bootstraps a new CherryDB instance with core Census data. ###
+### Bootstraps a new CherryDB instance with core Census metadata. ###
 years=( "2010" "2020" )
 levels=(
-    "block"
-    "bg"
-    "tract"
-    "county"
     "state"
+    "county"
+    "tract"
+    "bg"
+    "block"
     "vtd"
     "place"
     "cousub"
@@ -95,20 +95,4 @@ do
         --template "$base_dir/columns/pl_geo.yaml" \
         --yr "${year:2:2}" \
         --year $year
-done
-
-for state in "${fips[@]}"
-do
-    for year in "${years[@]}"
-    do
-        for level in "${levels[@]}"
-        do
-            echo "Loading geographies: FIPS $state, $year Census, $level level..."
-            python -m cherrydb_etl.bootstrap.pl_geo \
-                --namespace "census.$year" \
-                --fips $state \
-                --year $year \
-                --level $level 
-        done
-    done
 done
