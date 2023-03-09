@@ -13,7 +13,6 @@ levels=(
     "cousub"
     "aiannh" 
 )
-fips=("26")
 pl_source_url="https://www2.census.gov/geo/tiger/TIGER2020PL/"
 base_dir="$( dirname -- "$0"; )"
 
@@ -94,5 +93,13 @@ do
         --namespace "census.$year" \
         --template "$base_dir/columns/pl_geo.yaml" \
         --yr "${year:2:2}" \
+        --year $year
+done
+
+echo "Creating Census PL 94-171 population columns..."
+for year in "${years[@]}"
+do
+    python -m cherrydb_etl.bootstrap.pl_pop_table_columns \
+        --namespace "census.$year" \
         --year $year
 done

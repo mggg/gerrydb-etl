@@ -40,7 +40,7 @@ def create_columns(ctx, template_path: Path, namespace: str):
     db = CherryDB(namespace=namespace)
     with db.context(
         notes=(
-            f"ETL script {__name__}: creating columns from "
+            f"ETL script {__file__}: creating columns from "
             f"template {template_path.parts[-1]}"
         )
     ) as ctx:
