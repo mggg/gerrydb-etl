@@ -8,7 +8,8 @@ from cherrydb import CherryDB
 from jinja2 import Template
 from shapely import Point
 
-from cherrydb_etl import TabularConfig, config_logger, download_dataframe_with_hash
+from cherrydb_etl import (TabularConfig, config_logger,
+                          download_dataframe_with_hash)
 
 log = logging.getLogger()
 
@@ -38,7 +39,7 @@ LAYER_URLS = {
     "county/2020": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/COUNTY/2020/tl_2020_{fips}_county20.zip",
     "state/2010": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/STATE/2010/tl_2020_{fips}_state10.zip",
     "state/2020": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/STATE/2020/tl_2020_{fips}_state20.zip",
-    "vtd/2010": "https://www2.census.gov/geo/tiger/TIGER2010/VTD/2012/tl_2012_{fips}_vtd10.zip",
+    "vtd/2010": "https://www2.census.gov/geo/tiger/TIGER2012/VTD/tl_2012_{fips}_vtd10.zip",
     "vtd/2020": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/VTD/2020/tl_2020_{fips}_vtd20.zip",
     "place/2010": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/PLACE/2010/tl_2020_{fips}_place10.zip",
     "place/2020": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/PLACE/2020/tl_2020_{fips}_place20.zip",

@@ -215,7 +215,7 @@ def create_columns(namespace: str, year: str):
             ctx.column_sets.create(
                 path=table.lower(),
                 columns=table_cols,
-                description="{year} U.S. Census P.L. 94-171 Table {table}",
+                description=f"{year} U.S. Census P.L. 94-171 Table {table}",
             )
 
 
