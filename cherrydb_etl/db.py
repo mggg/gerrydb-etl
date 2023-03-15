@@ -53,7 +53,11 @@ class DirectTransactionContext:
         return self  # TODO: cleanup
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.dry_run or os.getenv("CHERRY_DRY_RUN", "").lower() == "true":
+        if (
+            exc_type
+            or self.dry_run
+            or os.getenv("CHERRY_DRY_RUN", "").lower() == "true"
+        ):
             self.db.rollback()
         else:
             try:
