@@ -14,11 +14,10 @@ import pandas as pd
 from cherrydb_meta.crud import obj_meta
 from cherrydb_meta.crud.column import COLUMN_TYPE_TO_VALUE_COLUMN
 from cherrydb_meta.enums import ColumnType
-from cherrydb_meta.models import (ColumnValue, DataColumn, Geography,
-                                  ObjectMeta, User)
+from cherrydb_meta.models import ColumnValue, DataColumn, Geography, ObjectMeta, User
 from cherrydb_meta.schemas import ObjectMetaCreate
-from sqlalchemy import Session, create_engine, insert, update
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, insert, update
+from sqlalchemy.orm import sessionmaker, Session
 
 
 @dataclass
@@ -38,6 +37,9 @@ class DirectTransactionContext:
             self.db = sessionmaker(create_engine(os.getenv("CHERRY_DATABASE_URI")))()
         self.db.begin()
 
+        if self.email is None:
+            self.email = os.getenv("CHERRY_EMAIL")
+
         if self.user is None:
             self.user = self.db.query(User).filter(User.email == self.email).first()
 
@@ -48,10 +50,10 @@ class DirectTransactionContext:
                 user=self.user,
             )
 
-        return self
+        return self  # TODO: cleanup
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.dry_run or os.getenv("CHERRY_DRY_RUN").lower() == "true":
+        if self.dry_run or os.getenv("CHERRY_DRY_RUN", "").lower() == "true":
             self.db.rollback()
         else:
             try:
@@ -81,7 +83,7 @@ class DirectTransactionContext:
             rows = []
             validation_errors = []
             values = df[col_name]
-            for geo_id, value in values:
+            for geo_id, value in values.items():
                 geo = geos[geo_id]
                 suffix = "column value for geography {geo.full_path}"
                 if col.type == ColumnType.FLOAT and isinstance(value, int):

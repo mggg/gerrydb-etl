@@ -1,15 +1,24 @@
 """Imports base Census geographies."""
 import logging
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
 import yaml
+import shapely.wkb
 from cherrydb import CherryDB
 from jinja2 import Template
 from shapely import Point
 
-from cherrydb_etl import (TabularConfig, config_logger,
-                          download_dataframe_with_hash)
+from cherrydb_etl import TabularConfig, config_logger, download_dataframe_with_hash
+
+try:
+    from sqlalchemy import insert, select, update
+    from cherrydb_meta import crud, models, schemas
+    from cherrydb_etl.db import DirectTransactionContext
+except ImportError:
+    crud = None
 
 log = logging.getLogger()
 
@@ -65,6 +74,9 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         * `namespace` exists.
         * A `GeoLayer` with path `<level>/<year>` exists in the namespace.
     """
+    if os.getenv("CHERRY_BULK_IMPORT") and crud is None:
+        raise RuntimeError("cherrydb_meta must be available in bulk import mode.")
+
     db = CherryDB(namespace=namespace)
     root_loc = db.localities[fips]
     layer = db.geo_layers[level]
@@ -100,25 +112,140 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         Point(long, lat) for long, lat in zip(internal_longitudes, internal_latitudes)
     ]
 
-    with db.context(
-        notes=(
-            f"Loaded by ETL script {__name__} from {year} U.S. Census {level} "
-            f"shapefile {layer_url} (SHA256: {layer_hash.hexdigest()})"
+    import_notes = (
+        f"Loaded by ETL script {__name__} from {year} U.S. Census {level} "
+        f"shapefile {layer_url} (SHA256: {layer_hash.hexdigest()})"
+    )
+
+    if os.getenv("CHERRY_BULK_IMPORT"):
+        log.info(
+            "Importing geographies via bulk import mode (direct database access)..."
         )
-    ) as ctx:
-        ctx.load_dataframe(
-            df=layer_gdf,
-            columns=columns,
-            create_geo=True,
-            locality=root_loc,
-            layer=layer,
-        )
-        for county_fips, county_geos in geos_by_county.items():
-            full_fips = fips + county_fips
-            log.info("Mapping units for county (equivalent) %s...", full_fips)
-            ctx.geo_layers.map_locality(
-                layer=layer, locality=full_fips, geographies=county_geos
+        with DirectTransactionContext(notes=import_notes) as ctx:
+            now = datetime.now(timezone.utc)
+            namespace_obj = crud.namespace.get(db=ctx.db, path=namespace)
+            assert namespace_obj is not None
+
+            # Create geographies in bulk.
+            log.info("Creating geographies...")
+            geo_import, _ = crud.geo_import.create(
+                db=ctx.db, obj_meta=ctx.meta, namespace=namespace_obj
             )
+            geographies_raw = [
+                schemas.GeographyCreate(
+                    path=row.Index,
+                    geography=shapely.wkb.dumps(row.geometry),
+                    internal_point=shapely.wkb.dumps(row.internal_point),
+                )
+                for row in layer_gdf.itertuples()
+            ]
+            geographies, _ = crud.geography.create_bulk(
+                db=ctx.db,
+                objs_in=geographies_raw,
+                obj_meta=ctx.meta,
+                geo_import=geo_import,
+                namespace=namespace_obj,
+            )
+            geos_by_path = {geo.path: geo for geo, _ in geographies}
+
+            # Update column values in bulk.
+            log.info("Updating column values...")
+            raw_cols = (
+                ctx.db.query(models.DataColumn)
+                .filter(
+                    models.DataColumn.col_id.in_(
+                        select(models.ColumnRef.col_id).filter(
+                            models.ColumnRef.path.in_(
+                                col.canonical_path for col in columns.values()
+                            ),
+                            models.ColumnRef.namespace_id == namespace_obj.namespace_id,
+                        )
+                    )
+                )
+                .all()
+            )
+            cols_by_canonical_path = {col.canonical_ref.path: col for col in raw_cols}
+            cols_by_alias = {
+                alias: cols_by_canonical_path[col.canonical_path]
+                for alias, col in columns.items()
+            }
+            ctx.load_column_values(cols=cols_by_alias, geos=geos_by_path, df=layer_gdf)
+
+            # Create GeoSets in bulk.
+            log.info("Updating GeoSets...")
+            layer_obj = crud.geo_layer.get(
+                db=ctx.db, path=level, namespace=namespace_obj
+            )
+            full_fips = [fips] + [fips + county_fips for county_fips in geos_by_county]
+            loc_ids = ctx.db.execute(
+                select(models.Locality.loc_id, models.LocalityRef.path)
+                .join(models.LocalityRef, onclause=models.Locality.refs)
+                .filter(models.LocalityRef.path.in_(full_fips))
+            )
+            loc_ids_by_fips = {loc.path: loc.loc_id for loc in loc_ids}
+
+            # ...but first, deprecate all the old ones.
+            ctx.db.execute(
+                update(models.GeoSetVersion)
+                .where(
+                    models.GeoSetVersion.layer_id == layer_obj.layer_id,
+                    models.GeoSetVersion.loc_id.in_(loc.loc_id for loc in loc_ids),
+                    models.GeoSetVersion.valid_to.is_(None),
+                )
+                .values(valid_to=now)
+            )
+
+            geo_sets = ctx.db.scalars(
+                insert(models.GeoSetVersion).returning(models.GeoSetVersion),
+                [
+                    {
+                        "layer_id": layer_obj.layer_id,
+                        "loc_id": loc_id,
+                        "valid_from": now,
+                        "meta_id": ctx.meta.meta_id,
+                    }
+                    for loc_id in loc_ids_by_fips.values()
+                ],
+            )
+            loc_id_to_set_id = {
+                geo_set.loc_id: geo_set.set_version_id for geo_set in geo_sets
+            }
+
+            # Add members to GeoSets in bulk.
+            log.info("Adding members to new GeoSets...")
+            root_set_id = loc_id_to_set_id[loc_ids_by_fips[fips]]
+            set_members = [
+                {
+                    "set_version_id": root_set_id,
+                    "geo_id": geo.geo_id,
+                }
+                for geo, _ in geographies
+            ]
+            for county_fips, county_geos in geos_by_county.items():
+                county_set_id = loc_id_to_set_id[loc_ids_by_fips[fips + county_fips]]
+                for geo_path in county_geos:
+                    set_members.append(
+                        {
+                            "set_version_id": county_set_id,
+                            "geo_id": geos_by_path[geo_path].geo_id,
+                        }
+                    )
+            ctx.db.execute(insert(models.GeoSetMember), set_members)
+    else:
+        log.info("Importing geographies via API...")
+        with db.context(notes=import_notes) as ctx:
+            ctx.load_dataframe(
+                df=layer_gdf,
+                columns=columns,
+                create_geo=True,
+                locality=root_loc,
+                layer=layer,
+            )
+            for county_fips, county_geos in geos_by_county.items():
+                full_fips = fips + county_fips
+                ctx.geo_layers.map_locality(
+                    layer=layer, locality=full_fips, geographies=county_geos
+                )
 
 
 if __name__ == "__main__":

@@ -8,7 +8,13 @@ import pandas as pd
 from cherrydb import CherryDB
 
 from cherrydb_etl import config_logger
-from cherrydb_etl.db import DirectTransactionContext
+
+try:
+    from sqlalchemy import select
+    from cherrydb_meta import crud, models
+    from cherrydb_etl.db import DirectTransactionContext
+except ImportError:
+    crud = None
 
 log = logging.getLogger()
 
@@ -41,6 +47,9 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         raise ValueError(f'Level "{level}" is national (no state FIPS code used).')
     elif fips is None:
         raise ValueError(f'Level "{level}" requires a state FIPS code.')
+
+    if os.getenv("CHERRY_BULK_IMPORT") and crud is None:
+        raise RuntimeError("cherrydb_meta must be available in bulk import mode.")
 
     base_params = {"get": f"group({table})"}
     api_key = os.getenv("CENSUS_API_KEY")
@@ -101,13 +110,54 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
     for col in table_cols:
         table_df[col] = table_df[col].astype(int)
 
-    with DirectTransactionContext(
-        notes=(
-            f"ETL script {__file__}: loading data for {year} "
-            f"U.S. Census P.L. 94-171 Table {table}"
+    import_notes = (
+        f"ETL script {__file__}: loading data for {year} "
+        f"U.S. Census P.L. 94-171 Table {table}"
+    )
+
+    if os.getenv("CHERRY_BULK_IMPORT"):
+        log.info(
+            "Importing column data via bulk import mode (direct database access)..."
         )
-    ) as ctx:
-        ctx.load_dataframe(table_df, table_cols)
+        with DirectTransactionContext(notes=import_notes) as ctx:
+            namespace_obj = crud.namespace.get(db=ctx.db, path=namespace)
+            assert namespace_obj is not None
+
+            geographies = crud.geography.get_bulk(
+                db=ctx.db,
+                namespaced_paths=[(namespace, idx) for idx in table_df.index],
+            )
+            if len(geographies) < len(table_df):
+                raise ValueError(
+                    f"Cannot perform bulk import (expected {len(table_df)} "
+                    f"geographies, found {len(geographies)})."
+                )
+
+            raw_cols = (
+                ctx.db.query(models.DataColumn)
+                .filter(
+                    models.DataColumn.col_id.in_(
+                        select(models.ColumnRef.col_id).filter(
+                            models.ColumnRef.path.in_(
+                                col.path for col in table_cols.values()
+                            ),
+                            models.ColumnRef.namespace_id == namespace_obj.namespace_id,
+                        )
+                    )
+                )
+                .all()
+            )
+            cols_by_canonical_path = {col.canonical_ref.path: col for col in raw_cols}
+            cols_by_alias = {
+                alias: cols_by_canonical_path[col.canonical_path]
+                for alias, col in table_cols.items()
+            }
+            geos_by_path = {geo.path: geo for geo in geographies}
+            ctx.load_column_values(cols=cols_by_alias, geos=geos_by_path, df=table_df)
+    else:
+        log.info("Importing column data via API...")
+        with db.context(notes=import_notes) as ctx:
+            ctx.load_dataframe(table_df, table_cols)
 
 
 if __name__ == "__main__":
