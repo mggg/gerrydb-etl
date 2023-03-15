@@ -94,7 +94,7 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
             col_aliases[alias] = col
 
     response = httpx.get(
-        url=SOURCE_URL.format(year=year), params={**base_params, **query}
+        url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
     )
     response.raise_for_status()
 
