@@ -8,11 +8,12 @@ levels=(
     "state"
     "county"
     "tract"
-#    "bg"
-#    "vtd"
-#    "place"
-#    "cousub"
-#    "aiannh" 
+    "bg"
+    "block"
+    "vtd"
+    "place"
+    "cousub"
+#   "aiannh" 
 )
 
 for year in "${years[@]}"

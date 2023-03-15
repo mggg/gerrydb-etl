@@ -5,7 +5,18 @@
 
 years=(  "2010" "2020" )
 tables=( "P1" "P2" "P3" "P4" )
-levels=( "county" "tract" "bg" "vtd" "place" "cousub" )
+levels=(
+    "state"
+    "county"
+    "tract"
+    "bg"
+    "block"
+    "vtd"
+    "place"
+    "cousub"
+#   "aiannh" 
+)
+
 
 for year in "${years[@]}"
 do
