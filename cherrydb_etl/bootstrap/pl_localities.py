@@ -4,6 +4,8 @@ import warnings
 from collections import Counter
 
 import click
+import geopandas as gpd
+import pandas as pd
 import us
 from cherrydb import CherryDB
 from cherrydb.schemas import LocalityCreate
@@ -13,13 +15,19 @@ from cherrydb_etl import config_logger, download_dataframe_with_hash, pathify
 
 log = logging.getLogger()
 
-COUNTIES_URL = (
+COUNTY_2010_URL = (
+    "https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip"
+)
+COUNTY_2020_URL = (
     "https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip"
 )
 
 NOTE_PREFIX = f"Loaded by ETL script {__file__} from the"
 STATE_NOTES = f"{NOTE_PREFIX} `us` package (https://github.com/unitedstates/python-us)"
-COUNTY_NOTES = f"{NOTE_PREFIX} 2020 U.S. Census counties shapefile ({COUNTIES_URL})"
+COUNTY_NOTES = (
+    f"{NOTE_PREFIX} 2010 U.S. Census counties shapefile ({COUNTY_2010_URL}) "
+    f"and the 2020 U.S. Census counties shapefile ({COUNTY_2020_URL})"
+)
 
 # For disambiguation.
 # Most overrides are in Virginia, which has many independent cities that share
@@ -44,6 +52,9 @@ CANONICAL_PATH_OVERRIDES = {
     # Richmond is an independent city (and state capital).
     "51159": "virginia/richmond-county",
     "51760": "virginia/city-of-richmond",
+    # Bedford was an independent city from 1968 to 2013.
+    "51019": "virginia/bedford-county",
+    "51515": "virginia/city-of-bedford",
 }
 ALIAS_OVERRIDES = {
     "24005": ["md/baltimore-county"],
@@ -58,6 +69,8 @@ ALIAS_OVERRIDES = {
     "51770": ["va/city-of-roanoke", "virginia/roanoke-city", "va/roanoke-city"],
     "51159": ["va/richmond-county"],
     "51760": ["va/city-of-richmond", "virginia/richmond-city", "va/richmond-city"],
+    "51019": ["va/bedford-county"],
+    "51515": ["va/city-of-bedford", "virginia/bedford-city", "va/bedford-city"],
 }
 
 
@@ -85,7 +98,27 @@ def utm_zone_projtext(zone: int) -> str:
 def load_localities():
     """Imports localities for states, territories, and counties/county equivalents."""
     db = CherryDB()
-    counties_gdf, counties_hash = download_dataframe_with_hash(COUNTIES_URL)
+    counties_gdf, counties_hash = download_dataframe_with_hash(COUNTY_2020_URL)
+
+    # Cross-vintage compatibility: prefer 2020 data, but add legacy counties
+    # that were eliminated between 2010 and 2020.
+    counties_2010_gdf, counties_2010_hash = download_dataframe_with_hash(
+        COUNTY_2010_URL
+    )
+    counties_2010_gdf = counties_2010_gdf.rename(
+        columns={
+            col: col[:-2] if col.endswith("10") else col
+            for col in counties_2010_gdf.columns
+        }
+    )
+    legacy_counties = set(counties_2010_gdf["GEOID"]) - set(counties_gdf["GEOID"])
+    legacy_counties_gdf = counties_2010_gdf[
+        counties_2010_gdf["GEOID"].isin(legacy_counties)
+    ]
+    counties_gdf = gpd.GeoDataFrame(
+        pd.concat([counties_gdf, legacy_counties_gdf], ignore_index=True),
+        crs=counties_gdf.crs,
+    )
 
     state_like = us.STATES_AND_TERRITORIES + [us.states.lookup("DC")]
     with db.context(notes=STATE_NOTES) as ctx:
@@ -117,6 +150,7 @@ def load_localities():
 
     state_fips_to_name = {state.fips: state.name for state in state_like}
     state_fips_to_abbr = {state.fips: state.abbr for state in state_like}
+
     counties_gdf = counties_gdf[counties_gdf.STATEFP != "11"].copy()  # drop DC
     counties_gdf["state_name"] = counties_gdf["STATEFP"].map(state_fips_to_name)
     counties_gdf["state_abbr"] = counties_gdf["STATEFP"].map(state_fips_to_abbr)
@@ -126,7 +160,11 @@ def load_localities():
     counties_gdf = counties_gdf.sort_values(by=["GEOID"])
 
     with db.context(
-        notes=COUNTY_NOTES + f" (SHA256: {counties_hash.hexdigest()})"
+        notes=(
+            COUNTY_NOTES
+            + f" (2010 SHA256: {counties_2010_hash.hexdigest()}, "
+            + f"2020 SHA256: {counties_hash.hexdigest()})"
+        )
     ) as ctx:
         county_locs = []
         for row in counties_gdf.itertuples():
