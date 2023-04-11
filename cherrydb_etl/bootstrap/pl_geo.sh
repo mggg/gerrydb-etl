@@ -9,7 +9,7 @@ levels=(
     "county"
     "tract"
     "bg"
-    "block"
+#   "block"
     "vtd"
     "place"
     "cousub"

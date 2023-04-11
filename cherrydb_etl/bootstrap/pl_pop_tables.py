@@ -8,10 +8,13 @@ import pandas as pd
 from cherrydb import CherryDB
 
 from cherrydb_etl import config_logger
+from cherrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
+                                              MISSING_DATASETS, MissingDataset)
 
 try:
-    from sqlalchemy import select
     from cherrydb_meta import crud, models
+    from sqlalchemy import select
+
     from cherrydb_etl.db import DirectTransactionContext
 except ImportError:
     crud = None
@@ -20,19 +23,21 @@ log = logging.getLogger()
 
 TABLES = ("P1", "P2", "P3", "P4")
 SOURCE_URL = "https://api.census.gov/data/{year}/dec/pl"
-LEVELS = (
-    ### central spine ###
+CENTRAL_SPINE_LEVELS = (
     "block",
     "bg",
     "tract",
     "county",
     "state",
-    ### auxiliary to spine ###
+)
+# Levels auxiliary to central spine.
+AUXILIARY_LEVELS = (
     "vtd",
     "place",
     "cousub",
     "aiannh",  # American Indian/Alaska Native/Native Hawaiian Areas
 )
+LEVELS = CENTRAL_SPINE_LEVELS + AUXILIARY_LEVELS
 
 
 @click.command()
@@ -43,6 +48,9 @@ LEVELS = (
 @click.option("--fips", help="State/territory FIPS code.")
 def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
     """Loads Census PL 94-171 tables P1 through P4 from the Census API."""
+    if MissingDataset(fips=fips, level=level, year=year) in MISSING_DATASETS:
+        log.warning("Dataset not published by Census. Nothing to do.")
+        exit()
     if level in ("state", "aiannh") and fips is not None:
         raise ValueError(f'Level "{level}" is national (no state FIPS code used).')
     elif fips is None:
@@ -101,6 +109,8 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
     rows = response.json()
     table_df = pd.DataFrame.from_records(rows[1:], columns=rows[0])
     table_df["id"] = table_df[list(id_cols)].agg("".join, axis=1)
+    if level in AUXILIARY_LEVELS:
+        table_df["id"] = f"{level}:" + table_df["id"]
     table_df = table_df.rename(columns={col: col.lower() for col in table_df.columns})
     table_df = table_df.set_index("id")
 

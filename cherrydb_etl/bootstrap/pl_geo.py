@@ -5,17 +5,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import click
-import yaml
 import shapely.wkb
+import yaml
 from cherrydb import CherryDB
 from jinja2 import Template
 from shapely import Point
 
-from cherrydb_etl import TabularConfig, config_logger, download_dataframe_with_hash
+from cherrydb_etl import (TabularConfig, config_logger,
+                          download_dataframe_with_hash)
+from cherrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
+                                              MISSING_DATASETS, MissingDataset)
 
 try:
-    from sqlalchemy import insert, select, update
     from cherrydb_meta import crud, models, schemas
+    from sqlalchemy import insert, select, update
+
     from cherrydb_etl.db import DirectTransactionContext
 except ImportError:
     crud = None
@@ -23,19 +27,6 @@ except ImportError:
 log = logging.getLogger()
 
 
-LEVELS = (
-    ### central spine ###
-    "block",
-    "bg",
-    "tract",
-    "county",
-    "state",
-    ### auxiliary to spine ###
-    "vtd",
-    "place",
-    "cousub",
-    "aiannh",  # American Indian/Alaska Native/Native Hawaiian Areas
-)
 SOURCE_URL = "https://www2.census.gov/geo/tiger/TIGER2020PL/"
 LAYER_URLS = {
     "block/2010": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/TABBLOCK/2010/tl_2020_{fips}_tabblock10.zip",
@@ -74,6 +65,10 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         * `namespace` exists.
         * A `GeoLayer` with path `<level>/<year>` exists in the namespace.
     """
+    if MissingDataset(fips=fips, level=level, year=year) in MISSING_DATASETS:
+        log.warning("Dataset not published by Census. Nothing to do.")
+        exit()
+
     if os.getenv("CHERRY_BULK_IMPORT") and crud is None:
         raise RuntimeError("cherrydb_meta must be available in bulk import mode.")
 
@@ -98,6 +93,12 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         if county_col in layer_gdf.columns
         else {}
     )
+    if level in AUXILIARY_LEVELS:
+        layer_gdf[index_col] = f"{level}:" + layer_gdf[index_col]
+        geos_by_county = {
+            county: [f"{level}:{unit}" for unit in units]
+            for county, units in geos_by_county.items()
+        }
     layer_gdf = layer_gdf.set_index(index_col)
 
     columns = {

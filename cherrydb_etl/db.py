@@ -14,10 +14,11 @@ import pandas as pd
 from cherrydb_meta.crud import obj_meta
 from cherrydb_meta.crud.column import COLUMN_TYPE_TO_VALUE_COLUMN
 from cherrydb_meta.enums import ColumnType
-from cherrydb_meta.models import ColumnValue, DataColumn, Geography, ObjectMeta, User
+from cherrydb_meta.models import (ColumnValue, DataColumn, Geography,
+                                  ObjectMeta, User)
 from cherrydb_meta.schemas import ObjectMetaCreate
 from sqlalchemy import create_engine, insert, update
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 
 @dataclass

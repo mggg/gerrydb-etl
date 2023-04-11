@@ -88,10 +88,21 @@ def identify_utm_zone(df):
     return utm_counts.most_common(1)[0][0]
 
 
-def utm_zone_projtext(zone: int) -> str:
-    """Returns the projtext for EPSG:269XX, where XX is a UTM zone code."""
-    assert 1 <= zone <= 60
-    return f"+proj=utm +zone={zone} +datum=NAD83 +units=m +no_defs"
+def utm_zone_proj(zone: int) -> str:
+    """Returns an EPSG identifier for a zone-appropriate UTM projection."""
+    if 3 <= zone <= 20:
+        # EPSG:26901 through EPSG:26920 are UTM projections appropriate
+        # for the continental U.S., Hawaii, and Alaska.
+        return f"epsg:269{str(zone).zfill(2)}"
+    if zone == 2:
+        # The only locality in UTM zone 2 covered by the decennial Census
+        # is American Samoa, which is also the only Census locality in
+        # the Southern Hemisphere.
+        return "epsg:6636"  # NAD83(PA11) / UTM zone 2S
+    if zone == 55:
+        # Gaum and Northern Mariana Islands are in zone 55N.
+        return "epsg:8693"  # NAD83(MA11) / UTM zone 55N
+    raise ValueError("Zone not covered by the U.S. Census.")
 
 
 @click.command()
@@ -139,7 +150,7 @@ def load_localities():
                     parent_path="us",
                     name=state.name,
                     aliases=[state.fips, state.abbr.lower()],
-                    default_proj=utm_zone_projtext(zone),
+                    default_proj=utm_zone_proj(zone),
                 )
             )
 
@@ -183,7 +194,7 @@ def load_localities():
                     parent_path=pathify(row.state_name),
                     name=row.full_name,
                     aliases=aliases,
-                    default_proj=utm_zone_projtext(zone),
+                    default_proj=utm_zone_proj(zone),
                 )
             )
 
