@@ -7,7 +7,7 @@ from typing import Tuple
 
 import geopandas as gpd
 import httpx
-from cherrydb.schemas import ColumnKind, ColumnType
+from gerrydb.schemas import ColumnKind, ColumnType
 from pydantic import BaseModel, Field
 
 COLUMN_TYPE_TO_PY_TYPE = {

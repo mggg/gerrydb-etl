@@ -7,11 +7,10 @@ import click
 import geopandas as gpd
 import pandas as pd
 import us
-from cherrydb import CherryDB
-from cherrydb.schemas import LocalityCreate
+from gerrydb import GerryDB
+from gerrydb.schemas import LocalityCreate
+from gerrydb_etl import config_logger, download_dataframe_with_hash, pathify
 from utm import from_latlon
-
-from cherrydb_etl import config_logger, download_dataframe_with_hash, pathify
 
 log = logging.getLogger()
 
@@ -108,7 +107,7 @@ def utm_zone_proj(zone: int) -> str:
 @click.command()
 def load_localities():
     """Imports localities for states, territories, and counties/county equivalents."""
-    db = CherryDB()
+    db = GerryDB()
     counties_gdf, counties_hash = download_dataframe_with_hash(COUNTY_2020_URL)
 
     # Cross-vintage compatibility: prefer 2020 data, but add legacy counties

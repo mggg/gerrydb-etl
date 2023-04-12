@@ -7,20 +7,18 @@ from pathlib import Path
 import click
 import shapely.wkb
 import yaml
-from cherrydb import CherryDB
+from gerrydb import GerryDB
+from gerrydb_etl import (TabularConfig, config_logger,
+                         download_dataframe_with_hash)
+from gerrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
+                                             MISSING_DATASETS, MissingDataset)
 from jinja2 import Template
 from shapely import Point
 
-from cherrydb_etl import (TabularConfig, config_logger,
-                          download_dataframe_with_hash)
-from cherrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
-                                              MISSING_DATASETS, MissingDataset)
-
 try:
-    from cherrydb_meta import crud, models, schemas
+    from gerrydb_etl.db import DirectTransactionContext
+    from gerrydb_meta import crud, models, schemas
     from sqlalchemy import insert, select, update
-
-    from cherrydb_etl.db import DirectTransactionContext
 except ImportError:
     crud = None
 
@@ -69,10 +67,10 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         log.warning("Dataset not published by Census. Nothing to do.")
         exit()
 
-    if os.getenv("CHERRY_BULK_IMPORT") and crud is None:
-        raise RuntimeError("cherrydb_meta must be available in bulk import mode.")
+    if os.getenv("GERRYDB_BULK_IMPORT") and crud is None:
+        raise RuntimeError("gerrydb_meta must be available in bulk import mode.")
 
-    db = CherryDB(namespace=namespace)
+    db = GerryDB(namespace=namespace)
     root_loc = db.localities[fips]
     layer = db.geo_layers[level]
 
@@ -118,7 +116,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         f"shapefile {layer_url} (SHA256: {layer_hash.hexdigest()})"
     )
 
-    if os.getenv("CHERRY_BULK_IMPORT"):
+    if os.getenv("GERRYDB_BULK_IMPORT"):
         log.info(
             "Importing geographies via bulk import mode (direct database access)..."
         )

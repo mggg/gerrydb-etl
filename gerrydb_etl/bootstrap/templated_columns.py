@@ -4,10 +4,9 @@ from pathlib import Path
 
 import click
 import yaml
-from cherrydb import CherryDB
+from gerrydb import GerryDB
+from gerrydb_etl import TabularConfig, config_logger
 from jinja2 import Template
-
-from cherrydb_etl import TabularConfig, config_logger
 
 log = logging.getLogger()
 
@@ -37,7 +36,7 @@ def create_columns(ctx, template_path: Path, namespace: str):
     rendered_config = config_template.render(**template_args)
     config = TabularConfig(**yaml.safe_load(rendered_config))
 
-    db = CherryDB(namespace=namespace)
+    db = GerryDB(namespace=namespace)
     with db.context(
         notes=(
             f"ETL script {__file__}: creating columns from "

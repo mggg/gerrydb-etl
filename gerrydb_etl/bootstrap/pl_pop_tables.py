@@ -5,17 +5,15 @@ import os
 import click
 import httpx
 import pandas as pd
-from cherrydb import CherryDB
-
-from cherrydb_etl import config_logger
-from cherrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
-                                              MISSING_DATASETS, MissingDataset)
+from gerrydb import GerryDB
+from gerrydb_etl import config_logger
+from gerrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
+                                             MISSING_DATASETS, MissingDataset)
 
 try:
-    from cherrydb_meta import crud, models
+    from gerrydb_etl.db import DirectTransactionContext
+    from gerrydb_meta import crud, models
     from sqlalchemy import select
-
-    from cherrydb_etl.db import DirectTransactionContext
 except ImportError:
     crud = None
 
@@ -56,8 +54,8 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
     elif fips is None:
         raise ValueError(f'Level "{level}" requires a state FIPS code.')
 
-    if os.getenv("CHERRY_BULK_IMPORT") and crud is None:
-        raise RuntimeError("cherrydb_meta must be available in bulk import mode.")
+    if os.getenv("GERRYDB_BULK_IMPORT") and crud is None:
+        raise RuntimeError("gerrydb_meta must be available in bulk import mode.")
 
     base_params = {"get": f"group({table})"}
     api_key = os.getenv("CENSUS_API_KEY")
@@ -94,7 +92,7 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
     else:
         raise ValueError("Unknown level.")
 
-    db = CherryDB(namespace=namespace)
+    db = GerryDB(namespace=namespace)
     table_cols = db.column_sets[table.lower()]
     col_aliases = {}
     for col in table_cols.columns:
@@ -125,7 +123,7 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         f"U.S. Census P.L. 94-171 Table {table}"
     )
 
-    if os.getenv("CHERRY_BULK_IMPORT"):
+    if os.getenv("GERRYDB_BULK_IMPORT"):
         log.info(
             "Importing column data via bulk import mode (direct database access)..."
         )

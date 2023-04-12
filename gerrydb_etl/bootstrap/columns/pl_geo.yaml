@@ -125,7 +125,7 @@ columns:
   description: >
     Part Flag identifying if all or part of the entity is within the file.
 
-    Census geographies are imported to CherryDB at the state level, so this flag essentially indicates whether the entity spans multiple states.
+    Census geographies are imported to GerryDB at the state level, so this flag essentially indicates whether the entity spans multiple states.
 - source: LSAD{{yr}}
   target: lsad
   aliases: ["lsad{{yr}}"]

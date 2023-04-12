@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================================ #
-# Bootstraps a new CherryDB instance with Census geographic and population
+# Bootstraps a new GerryDB instance with Census geographic and population
 # data from all states and territories.
 # ============================================================================ #
 

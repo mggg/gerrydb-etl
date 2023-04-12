@@ -4,9 +4,8 @@ from typing import Optional
 
 import click
 import httpx
-from cherrydb import CherryDB
-
-from cherrydb_etl import config_logger
+from gerrydb import GerryDB
+from gerrydb_etl import config_logger
 
 log = logging.getLogger()
 
@@ -128,7 +127,7 @@ def create_columns(namespace: str, year: str):
         response.raise_for_status()
         table_variables[table] = response.json()["variables"]
 
-    db = CherryDB(namespace=namespace)
+    db = GerryDB(namespace=namespace)
 
     # Load columns by table.
     #

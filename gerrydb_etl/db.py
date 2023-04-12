@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import pandas as pd
-from cherrydb_meta.crud import obj_meta
-from cherrydb_meta.crud.column import COLUMN_TYPE_TO_VALUE_COLUMN
-from cherrydb_meta.enums import ColumnType
-from cherrydb_meta.models import (ColumnValue, DataColumn, Geography,
-                                  ObjectMeta, User)
-from cherrydb_meta.schemas import ObjectMetaCreate
+from gerrydb_meta.crud import obj_meta
+from gerrydb_meta.crud.column import COLUMN_TYPE_TO_VALUE_COLUMN
+from gerrydb_meta.enums import ColumnType
+from gerrydb_meta.models import (ColumnValue, DataColumn, Geography,
+                                 ObjectMeta, User)
+from gerrydb_meta.schemas import ObjectMetaCreate
 from sqlalchemy import create_engine, insert, update
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -35,11 +35,11 @@ class DirectTransactionContext:
     def __enter__(self) -> "DirectTransactionContext":
         """Creates a write context with metadata."""
         if self.db is None:
-            self.db = sessionmaker(create_engine(os.getenv("CHERRY_DATABASE_URI")))()
+            self.db = sessionmaker(create_engine(os.getenv("GERRYDB_DATABASE_URI")))()
         self.db.begin()
 
         if self.email is None:
-            self.email = os.getenv("CHERRY_EMAIL")
+            self.email = os.getenv("GERRYDB_EMAIL")
 
         if self.user is None:
             self.user = self.db.query(User).filter(User.email == self.email).first()
@@ -57,7 +57,7 @@ class DirectTransactionContext:
         if (
             exc_type
             or self.dry_run
-            or os.getenv("CHERRY_DRY_RUN", "").lower() == "true"
+            or os.getenv("GERRYDB_DRY_RUN", "").lower() == "true"
         ):
             self.db.rollback()
         else:

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-### Bootstraps a new CherryDB instance with core Census population data. ###
+### Bootstraps a new GerryDB instance with core Census population data. ###
 # Usage: ./pl_geo.sh <state FIPS code>
 
 years=(  "2010" "2020" )
@@ -25,7 +25,7 @@ do
         for table in "${tables[@]}"
         do
             echo "Loading population data: FIPS $1, $year Census, $level level, Table $table..."
-            python -m cherrydb_etl.bootstrap.pl_pop_tables \
+            python -m gerrydb_etl.bootstrap.pl_pop_tables \
                 --namespace "census.$year" \
                 --fips $1 \
                 --year $year \
