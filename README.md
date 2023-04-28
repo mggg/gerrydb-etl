@@ -7,7 +7,7 @@ This repository contains scripts used for bulk loading of data from the U.S. Cen
 * Create cloud resources: PostgreSQL + container deployment
     * Our deployment: Cloud Run (w/ Cloud Build) + Cloud SQL
     * see https://cloud.google.com/sql/docs/postgres/connect-run
-* Create database (see `cloud-sql-proxy`)
+* Create database (see [`cloud-sql-proxy`](https://cloud.google.com/sql/docs/postgres/sql-proxy) to connect)
     ```sql
     CREATE DATABASE gerrydb; CREATE EXTENSION postgis;
     ```
@@ -15,7 +15,7 @@ This repository contains scripts used for bulk loading of data from the U.S. Cen
     * Install pyenv (https://bgasparotto.com/install-pyenv-ubuntu-debian) + Python 3.11, gh (optional), git
     * Clone repos (`gerrydb-client-py`, `gerrydb-etl`)
     * Run `pip install poetry` and `poetry install`
-* Grab SQL credentials (grant VM access or use `cloud-sql-proxy`, etc.)
+* Grab SQL credentials (grant ephemeral VM direct network access or use `cloud-sql-proxy`)
 * Create schema and superuser API key (use `init.py` in `gerrydb-meta`)
 * Add API credentials to `~/.gerrydb/config`
 * Run ETL scripts 
