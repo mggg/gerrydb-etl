@@ -7,17 +7,19 @@ This repository contains scripts used for bulk loading of data from the U.S. Cen
 * Create cloud resources: PostgreSQL + container deployment
     * Our deployment: Cloud Run (w/ Cloud Build) + Cloud SQL
     * see https://cloud.google.com/sql/docs/postgres/connect-run
-* Create database (see cloud-sql-proxy)
+* Create database (see `cloud-sql-proxy`)
+    ```sql
     CREATE DATABASE gerrydb; CREATE EXTENSION postgis;
+    ```
 * Optional: create ephemeral VM for imports
-    Install pyenv (https://bgasparotto.com/install-pyenv-ubuntu-debian) + Python 3.11, gh (optional), git
-    Clone repos
-    pip install poetry, poetry install
-* Grab SQL credentials (grant VM access or use cloud-sql-proxy, etc.)
-* Create schema and superuser API key
-    python nuke.py
-* Create ~/.gerrydb/config
+    * Install pyenv (https://bgasparotto.com/install-pyenv-ubuntu-debian) + Python 3.11, gh (optional), git
+    * Clone repos (`gerrydb-client-py`, `gerrydb-etl`)
+    * Run `pip install poetry` and `poetry install`
+* Grab SQL credentials (grant VM access or use `cloud-sql-proxy`, etc.)
+* Create schema and superuser API key (use `init.py` in `gerrydb-meta`)
+* Add API credentials to `~/.gerrydb/config`
 * Run ETL scripts 
-    pl_init.sh (~5 min)
-    pl_geo.sh
-
+    1. `gerrydb_etl/bootstrap/pl_init.sh` (~5 min)
+    2. `gerrydb_etl/bootstrap/pl_geo.sh <state FIPS code>`
+    3. `gerrydb_etl/bootstrap/pl_pop.sh <state FIPS code>`
+    4. Repeat steps 2 and 3 for all desired states/territories
