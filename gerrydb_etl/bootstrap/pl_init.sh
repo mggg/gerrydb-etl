@@ -16,8 +16,10 @@ levels=(
 pl_source_url="https://www2.census.gov/geo/tiger/TIGER2020PL/"
 base_dir="$( dirname -- "$0"; )"
 
+# this has been run, all localities exist in DB
+# suppress_existence flag handles error raised when a locality already exists
 echo "Bootstrapping localities..."
-python -m gerrydb_etl.bootstrap.pl_localities
+python -m gerrydb_etl.bootstrap.pl_localities 
 
 echo "Bootstrapping Census namespaces..."
 for year in "${years[@]}"
