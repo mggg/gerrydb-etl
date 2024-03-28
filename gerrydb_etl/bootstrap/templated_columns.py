@@ -7,7 +7,7 @@ import yaml
 from gerrydb import GerryDB
 from gerrydb_etl import TabularConfig, config_logger
 from jinja2 import Template
-from gerrydb.exceptions import ResultError
+
 log = logging.getLogger()
 
 
@@ -45,20 +45,15 @@ def create_columns(ctx, template_path: Path, namespace: str):
     ) as ctx:
         for col in config.columns:
             log.info("Creating column %s in namespace %s...", col.target, namespace)
-            try:
-                ctx.columns.create(
-                    col.target,
-                    aliases=col.aliases,
-                    column_kind=col.kind,
-                    column_type=col.type,
-                    description=col.description,
-                    source_url=config.source_url,
-                )
-            except ResultError as e:
-                if "Failed to create column" in e.args[0]:
-                    print(f"Failed to create {col.target} column, already in namespace {namespace}")
-                else:
-                    raise e
+            ctx.columns.create(
+                col.target,
+                aliases=col.aliases,
+                column_kind=col.kind,
+                column_type=col.type,
+                description=col.description,
+                source_url=config.source_url,
+            )
+
 
 if __name__ == "__main__":
     config_logger(log)
