@@ -1,7 +1,7 @@
 #!/bin/bash
 
-### Bootstraps a new GerryDB instance with core Census population data. ###
-# Usage: ./pl_geo.sh <state FIPS code>
+### Adds core Census population data to db. ###
+# Usage: ./pl_pop.sh <state FIPS code>
 
 years=(  "2010" "2020" )
 tables=( "P1" "P2" "P3" "P4" )
@@ -10,12 +10,10 @@ levels=(
     "county"
     "tract"
     "bg"
-    "block"
     "vtd"
     "place"
     "cousub"
-#   "aiannh" 
-)
+    "block")
 
 
 for year in "${years[@]}"

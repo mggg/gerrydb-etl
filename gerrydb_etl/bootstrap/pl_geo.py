@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import geopandas as gpd
 import click
 import shapely.wkb
 import yaml
@@ -86,24 +87,84 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         url=layer_url,
         dtypes=config.source_dtypes(),
     )
+
     geos_by_county = (
         dict(layer_gdf.groupby(county_col)[index_col].apply(list))
         if county_col in layer_gdf.columns
         else {}
     )
+
     if level in AUXILIARY_LEVELS:
-        layer_gdf[index_col] = f"{level}:" + layer_gdf[index_col]
+        # since aiannh geographies cross state lines, the census subidivides the polygon but
+        # uses the same geoid, we add the fips code to make the geoid unique
+
+        # remove the r,t that stands for reservation, trust which only appears 
+        # at geo level, but not in pop data
+        if level == "aiannh":
+            def categorize_trust_res(x):
+                if x[-1].lower() == "t":
+                    return "trust"
+                elif x[-1].lower() == "r":
+                    return "reservation"
+                else:
+                    raise ValueError(f"Not a trust or reservation at geoid {x}")
+                
+            layer_gdf["res_trust_class"] = layer_gdf[index_col].apply(lambda x: categorize_trust_res(x))
+            layer_gdf[index_col] = layer_gdf[index_col].apply(lambda x: f"{level}:" + x.rstrip("rtRT")+f":fips{fips}")
+            yr = year[2:]
+
+            # if there was a geoid with both an R and T tag
+            if len(layer_gdf[index_col]) != len(set(layer_gdf[index_col])):
+                new_rows = {}
+                
+                for row, data in layer_gdf.iterrows():
+                    if data[index_col] not in new_rows:
+                        new_rows[data[index_col]] = data
+                        new_rows[data[index_col]]["collision_count"] = 0
+                    
+                    # if geoid already exists, indicates R/T collision
+                    else:
+                        new_rows[data[index_col]]["collision_count"] += 1
+                        if new_rows[data[index_col]]["collision_count"] > 1:
+                            raise ValueError(f"There has been a collision of 3 geoids {data[index_col]}")
+
+                        # add land and water, change res/trust class, union geometry
+                        new_rows[data[index_col]][f"ALAND{yr}"] += data[f"ALAND{yr}"]
+                        new_rows[data[index_col]][f"AWATER{yr}"] += data[f"AWATER{yr}"]
+                        new_rows[data[index_col]]["res_trust_class"] = "union"
+                        new_rows[data[index_col]]["geometry"] = shapely.unary_union([new_rows[data[index_col]]["geometry"], data["geometry"]])
+
+                        if new_rows[data[index_col]][f"NAME{yr}"] != data[f"NAME{yr}"]:
+                            if data[index_col] in ["aiannh:1075:fips32", "aiannh:1070:fips32"]:
+                                # the Fallon Paiute-Shoshone name has an extra (Reservation/Colony) appended
+                                pass
+                            else:
+                                print("geoid", (data[index_col]))
+                                print('name 1', new_rows[data[index_col]][f"NAME{yr}"])
+                                print("name 2", data[f"NAME{yr}"])
+                                raise ValueError(f"NAME{yr} does not match across R and T land in geoid {data[index_col]}")
+
+                      
+                layer_gdf = gpd.GeoDataFrame.from_dict(new_rows, orient = "index").set_crs(layer_gdf.crs)
+            layer_gdf = layer_gdf[[f"NAME{yr}", index_col, "geometry", f"INTPTLAT{yr}", f"INTPTLON{yr}", "res_trust_class"]]
+            
+
+        else:
+            layer_gdf[index_col] = f"{level}:" + layer_gdf[index_col]
         geos_by_county = {
             county: [f"{level}:{unit}" for unit in units]
             for county, units in geos_by_county.items()
         }
     layer_gdf = layer_gdf.set_index(index_col)
 
+    
     columns = {
         col.source: db.columns[col.target]
         for col in config.columns
         if col.source in layer_gdf.columns
     }
+
+    
 
     internal_latitudes = layer_gdf[f"INTPTLAT{year[2:]}"].apply(float)
     internal_longitudes = layer_gdf[f"INTPTLON{year[2:]}"].apply(float)
@@ -125,7 +186,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
             namespace_obj = crud.namespace.get(db=ctx.db, path=namespace)
             assert namespace_obj is not None
 
-            # Create geographies in bulk.
+            # Create geographies (geolayers were created by pl_init, geolayers do not know about the actual geography objects yet) in bulk.
             log.info("Creating geographies...")
             geo_import, _ = crud.geo_import.create(
                 db=ctx.db, obj_meta=ctx.meta, namespace=namespace_obj
@@ -170,7 +231,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
             }
             ctx.load_column_values(cols=cols_by_alias, geos=geos_by_path, df=layer_gdf)
 
-            # Create GeoSets in bulk.
+            # Create GeoSets (collections of geographys that instantiate a Locality) in bulk.
             log.info("Updating GeoSets...")
             layer_obj = crud.geo_layer.get(
                 db=ctx.db, path=level, namespace=namespace_obj
@@ -233,6 +294,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
     else:
         log.info("Importing geographies via API...")
         with db.context(notes=import_notes) as ctx:
+            
             ctx.load_dataframe(
                 df=layer_gdf,
                 columns=columns,

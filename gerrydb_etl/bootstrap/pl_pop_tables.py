@@ -45,13 +45,18 @@ LEVELS = CENTRAL_SPINE_LEVELS + AUXILIARY_LEVELS
 @click.option("--level", required=True, type=click.Choice(LEVELS))
 @click.option("--fips", help="State/territory FIPS code.")
 def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
-    """Loads Census PL 94-171 tables P1 through P4 from the Census API."""
+    """
+    Loads Census PL 94-171 tables P1 through P4 from the Census API.
+
+    https://www.census.gov/content/dam/Census/data/developers/api-user-guide/api-guide.pdf
+    https://api.census.gov/data.html
+    
+    """
     if MissingDataset(fips=fips, level=level, year=year) in MISSING_DATASETS:
         log.warning("Dataset not published by Census. Nothing to do.")
         exit()
-    if level in ("state", "aiannh") and fips is not None:
-        raise ValueError(f'Level "{level}" is national (no state FIPS code used).')
-    elif fips is None:
+
+    if fips is None:
         raise ValueError(f'Level "{level}" requires a state FIPS code.')
 
     if os.getenv("GERRYDB_BULK_IMPORT") and crud is None:
@@ -75,7 +80,7 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         query = {"in": f"state:{fips}", "for": "county:*"}
         id_cols = ("state", "county")
     elif level == "state":
-        query = {"for": "state:*"}
+        query = {"for": f"state:{fips}"}
         id_cols = ("state",)
     elif level == "vtd":
         query = {"in": f"state:{fips}", "for": "voting district:*"}
@@ -87,8 +92,9 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         query = {"in": f"state:{fips}", "for": "county subdivision:*"}
         id_cols = ("state", "county", "county subdivision")
     elif level == "aiannh":
-        query = {"for": "american indian area/alaska native area/hawaiian home land:*"}
-        id_cols = ("american indian area/alaska native area/hawaiian home land",)
+        query = {"for": f"american indian area/alaska native area/hawaiian home land (or part):*", "in":f"state:{fips}"}
+        id_cols = ("american indian area/alaska native area/hawaiian home land (or part)",)
+        
     else:
         raise ValueError("Unknown level.")
 
@@ -99,6 +105,8 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         for alias in col.aliases:
             col_aliases[alias] = col
 
+    # params are Query parameters to include in the URL, 
+    # as a string, dictionary, or sequence of two-tuples.
     response = httpx.get(
         url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
     )
@@ -107,8 +115,12 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
     rows = response.json()
     table_df = pd.DataFrame.from_records(rows[1:], columns=rows[0])
     table_df["id"] = table_df[list(id_cols)].agg("".join, axis=1)
+
     if level in AUXILIARY_LEVELS:
-        table_df["id"] = f"{level}:" + table_df["id"]
+        # since aiannh geographies cross state lines, the census subidivides the polygon but
+        # uses the same geoid, we add the fips code to make the geoid unique
+        table_df["id"] = f"{level}:" + table_df["id"]+ f":fips{fips}" if level == "aiannh" else f"{level}:" + table_df["id"]
+
     table_df = table_df.rename(columns={col: col.lower() for col in table_df.columns})
     table_df = table_df.set_index("id")
 
@@ -123,6 +135,7 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         f"U.S. Census P.L. 94-171 Table {table}"
     )
 
+    
     if os.getenv("GERRYDB_BULK_IMPORT"):
         log.info(
             "Importing column data via bulk import mode (direct database access)..."

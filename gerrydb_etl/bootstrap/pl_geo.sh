@@ -2,18 +2,17 @@
 
 ### Bootstraps a new GerryDB instance with core Census geographic data. ###
 # Usage: ./pl_geo.sh <state FIPS code>
+# must be used after pl_geo_states.sh
 
 years=( "2010" "2020" )
 levels=(
-    "state"
     "county"
     "tract"
     "bg"
-#   "block"
     "vtd"
     "place"
     "cousub"
-#   "aiannh" 
+    "block" # by far the longest import (2010, alabama, 252k blocks, 30 min; 2020 AL 20 min) 
 )
 
 for year in "${years[@]}"
