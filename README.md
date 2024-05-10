@@ -23,6 +23,4 @@ This repository contains scripts used for bulk loading of data from the U.S. Cen
     2. `gerrydb_etl/bootstrap/pl_geo_states.sh` (loads all state level geography)
     3. `gerrydb_etl/bootstrap/pl_geo_aiannh.sh` (loads all aiannh level geography)
     4. `gerrydb_etl/bootstrap/pl_pop_aiannh.sh` (loads all aiannh area populations)
-    5. `gerrydb_etl/bootstrap/pl_geo.sh <state FIPS code>` (loads subgeos of given state)
-    6. `gerrydb_etl/bootstrap/pl_pop.sh <state FIPS code>` (loads subpops of given state)
-    7. Repeat steps 5 and 6 for all desired states/territories.
+    5. `gerrydb_etl/bootstrap/pl_geo_and_pop_substates.sh` (loads all substate level geo and pop)

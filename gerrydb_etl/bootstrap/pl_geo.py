@@ -83,10 +83,18 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
     layer_url = LAYER_URLS[f"{level}/{year}"].format(fips=fips)
     index_col = "GEOID" + year[2:]
     county_col = "COUNTYFP" + year[2:]
-    layer_gdf, layer_hash = download_dataframe_with_hash(
-        url=layer_url,
-        dtypes=config.source_dtypes(),
-    )
+
+    # to handle server side issues, try loading one more time if fail
+    try:
+        layer_gdf, layer_hash = download_dataframe_with_hash(
+            url=layer_url,
+            dtypes=config.source_dtypes(),
+        )
+    except:
+        layer_gdf, layer_hash = download_dataframe_with_hash(
+            url=layer_url,
+            dtypes=config.source_dtypes(),
+        )
 
     geos_by_county = (
         dict(layer_gdf.groupby(county_col)[index_col].apply(list))

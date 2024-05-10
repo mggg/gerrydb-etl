@@ -105,12 +105,19 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         for alias in col.aliases:
             col_aliases[alias] = col
 
-    # params are Query parameters to include in the URL, 
-    # as a string, dictionary, or sequence of two-tuples.
-    response = httpx.get(
-        url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
-    )
-    response.raise_for_status()
+    # to handle server side errors, try reloading
+    try:
+        # params are Query parameters to include in the URL, 
+        # as a string, dictionary, or sequence of two-tuples.
+        response = httpx.get(
+            url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
+        )
+        response.raise_for_status()
+    except:
+        response = httpx.get(
+            url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
+        )
+        response.raise_for_status()
 
     rows = response.json()
     table_df = pd.DataFrame.from_records(rows[1:], columns=rows[0])
