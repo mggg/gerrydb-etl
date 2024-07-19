@@ -1,4 +1,5 @@
 """Imports base Census geographies."""
+
 import logging
 import os
 from datetime import datetime, timezone
@@ -9,10 +10,13 @@ import click
 import shapely.wkb
 import yaml
 from gerrydb import GerryDB
-from gerrydb_etl import (TabularConfig, config_logger,
-                         download_dataframe_with_hash)
-from gerrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
-                                             MISSING_DATASETS, MissingDataset)
+from gerrydb_etl import TabularConfig, config_logger, download_dataframe_with_hash
+from gerrydb_etl.bootstrap.pl_config import (
+    AUXILIARY_LEVELS,
+    LEVELS,
+    MISSING_DATASETS,
+    MissingDataset,
+)
 from jinja2 import Template
 from shapely import Point
 
@@ -96,6 +100,21 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
             dtypes=config.source_dtypes(),
         )
 
+    # Some geographies have a '/' in the geoid, which will mess up the path, so we remove it
+    # and replace all instances of '/' with '--' in the dataframe
+    layer_gdf = layer_gdf.applymap(
+        lambda x: x.replace("/", "--") if isinstance(x, str) else x
+    )
+
+    # Some Census shapefiles have completely duplicate rows (e.g. CA in 2010)
+    # so we drop any duplicates here to avoid path collisions in the DB.
+    # Note: The `drop_duplicates` method only drops the row if all columns are the same.
+    log.info("Dropping duplicates from layer_gdf")
+    n_rows = len(layer_gdf)
+    layer_gdf = layer_gdf.drop_duplicates()
+    if len(layer_gdf) < n_rows:
+        log.info(f"Dropped {n_rows - len(layer_gdf)} duplicate rows")
+
     geos_by_county = (
         dict(layer_gdf.groupby(county_col)[index_col].apply(list))
         if county_col in layer_gdf.columns
@@ -106,9 +125,10 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         # since aiannh geographies cross state lines, the census subidivides the polygon but
         # uses the same geoid, we add the fips code to make the geoid unique
 
-        # remove the r,t that stands for reservation, trust which only appears 
+        # remove the r,t that stands for reservation, trust which only appears
         # at geo level, but not in pop data
         if level == "aiannh":
+
             def categorize_trust_res(x):
                 if x[-1].lower() == "t":
                     return "trust"
@@ -116,46 +136,68 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
                     return "reservation"
                 else:
                     raise ValueError(f"Not a trust or reservation at geoid {x}")
-                
-            layer_gdf["res_trust_class"] = layer_gdf[index_col].apply(lambda x: categorize_trust_res(x))
-            layer_gdf[index_col] = layer_gdf[index_col].apply(lambda x: f"{level}:" + x.rstrip("rtRT")+f":fips{fips}")
+
+            layer_gdf["res_trust_class"] = layer_gdf[index_col].apply(
+                lambda x: categorize_trust_res(x)
+            )
+            layer_gdf[index_col] = layer_gdf[index_col].apply(
+                lambda x: f"{level}:" + x.rstrip("rtRT") + f":fips{fips}"
+            )
             yr = year[2:]
 
             # if there was a geoid with both an R and T tag
             if len(layer_gdf[index_col]) != len(set(layer_gdf[index_col])):
                 new_rows = {}
-                
+
                 for row, data in layer_gdf.iterrows():
                     if data[index_col] not in new_rows:
                         new_rows[data[index_col]] = data
                         new_rows[data[index_col]]["collision_count"] = 0
-                    
+
                     # if geoid already exists, indicates R/T collision
                     else:
                         new_rows[data[index_col]]["collision_count"] += 1
                         if new_rows[data[index_col]]["collision_count"] > 1:
-                            raise ValueError(f"There has been a collision of 3 geoids {data[index_col]}")
+                            raise ValueError(
+                                f"There has been a collision of 3 geoids {data[index_col]}"
+                            )
 
                         # add land and water, change res/trust class, union geometry
                         new_rows[data[index_col]][f"ALAND{yr}"] += data[f"ALAND{yr}"]
                         new_rows[data[index_col]][f"AWATER{yr}"] += data[f"AWATER{yr}"]
                         new_rows[data[index_col]]["res_trust_class"] = "union"
-                        new_rows[data[index_col]]["geometry"] = shapely.unary_union([new_rows[data[index_col]]["geometry"], data["geometry"]])
+                        new_rows[data[index_col]]["geometry"] = shapely.unary_union(
+                            [new_rows[data[index_col]]["geometry"], data["geometry"]]
+                        )
 
                         if new_rows[data[index_col]][f"NAME{yr}"] != data[f"NAME{yr}"]:
-                            if data[index_col] in ["aiannh:1075:fips32", "aiannh:1070:fips32"]:
+                            if data[index_col] in [
+                                "aiannh:1075:fips32",
+                                "aiannh:1070:fips32",
+                            ]:
                                 # the Fallon Paiute-Shoshone name has an extra (Reservation/Colony) appended
                                 pass
                             else:
                                 print("geoid", (data[index_col]))
-                                print('name 1', new_rows[data[index_col]][f"NAME{yr}"])
+                                print("name 1", new_rows[data[index_col]][f"NAME{yr}"])
                                 print("name 2", data[f"NAME{yr}"])
-                                raise ValueError(f"NAME{yr} does not match across R and T land in geoid {data[index_col]}")
+                                raise ValueError(
+                                    f"NAME{yr} does not match across R and T land in geoid {data[index_col]}"
+                                )
 
-                      
-                layer_gdf = gpd.GeoDataFrame.from_dict(new_rows, orient = "index").set_crs(layer_gdf.crs)
-            layer_gdf = layer_gdf[[f"NAME{yr}", index_col, "geometry", f"INTPTLAT{yr}", f"INTPTLON{yr}", "res_trust_class"]]
-            
+                layer_gdf = gpd.GeoDataFrame.from_dict(
+                    new_rows, orient="index"
+                ).set_crs(layer_gdf.crs)
+            layer_gdf = layer_gdf[
+                [
+                    f"NAME{yr}",
+                    index_col,
+                    "geometry",
+                    f"INTPTLAT{yr}",
+                    f"INTPTLON{yr}",
+                    "res_trust_class",
+                ]
+            ]
 
         else:
             layer_gdf[index_col] = f"{level}:" + layer_gdf[index_col]
@@ -165,14 +207,11 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
         }
     layer_gdf = layer_gdf.set_index(index_col)
 
-    
     columns = {
         col.source: db.columns[col.target]
         for col in config.columns
         if col.source in layer_gdf.columns
     }
-
-    
 
     internal_latitudes = layer_gdf[f"INTPTLAT{year[2:]}"].apply(float)
     internal_longitudes = layer_gdf[f"INTPTLON{year[2:]}"].apply(float)
@@ -302,7 +341,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
     else:
         log.info("Importing geographies via API...")
         with db.context(notes=import_notes) as ctx:
-            
+
             ctx.load_dataframe(
                 df=layer_gdf,
                 columns=columns,
@@ -310,6 +349,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
                 locality=root_loc,
                 layer=layer,
             )
+
             for county_fips, county_geos in geos_by_county.items():
                 full_fips = fips + county_fips
                 ctx.geo_layers.map_locality(

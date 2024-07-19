@@ -5,6 +5,7 @@ such as importing the entire PL 94-171 release. Its primary advantages are
 the avoidance of serialization/REST/caching overhead, and--more importantly--
 support for large-scale transactions. 
 """
+
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,8 +15,7 @@ import pandas as pd
 from gerrydb_meta.crud import obj_meta
 from gerrydb_meta.crud.column import COLUMN_TYPE_TO_VALUE_COLUMN
 from gerrydb_meta.enums import ColumnType
-from gerrydb_meta.models import (ColumnValue, DataColumn, Geography,
-                                 ObjectMeta, User)
+from gerrydb_meta.models import ColumnValue, DataColumn, Geography, ObjectMeta, User
 from gerrydb_meta.schemas import ObjectMetaCreate
 from sqlalchemy import create_engine, insert, update
 from sqlalchemy.orm import Session, sessionmaker

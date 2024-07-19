@@ -1,4 +1,5 @@
 """Common utilities for ETL scripts."""
+
 import logging
 import sys
 from hashlib import sha256

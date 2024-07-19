@@ -1,4 +1,5 @@
 """Creates columns for Census PL 94-171 tables P1 through P4."""
+
 import logging
 from typing import Optional
 
@@ -7,6 +8,7 @@ import httpx
 from gerrydb import GerryDB
 from gerrydb_etl import config_logger
 from gerrydb.exceptions import ResultError
+
 log = logging.getLogger()
 
 SOURCE_URL = "https://api.census.gov/data/{year}/dec/pl"
@@ -158,12 +160,12 @@ def create_columns(namespace: str, year: str):
                 canonical_name,
                 col_is_hispanic,
             ) in variables.items():
-                
+
                 # if column is redundant
                 if census_name in REDUNDANT_COLUMN_TO_CANONICAL_COLUMN:
                     log.info("Skipping column %s (redundant)...", census_name)
                     # use the column that corresponds to redundant
-                    table_cols.append(redundant_columns[census_name]) 
+                    table_cols.append(redundant_columns[census_name])
                     continue
 
                 if col_is_hispanic is None:
@@ -199,6 +201,10 @@ def create_columns(namespace: str, year: str):
 
                 try:
                     # try to create the column
+                    log.debug(f"making the column {col_name.lower()}")
+                    log.debug(
+                        f"\tdescription: {year} U.S. Census {col_description}: {demographic}"
+                    )
                     col = ctx.columns.create(
                         col_name.lower(),
                         aliases=[alias.lower() for alias in aliases],
@@ -212,22 +218,23 @@ def create_columns(namespace: str, year: str):
                     table_cols.append(col)
                     if redundant_name is not None:
                         redundant_columns[redundant_name] = col
-                    
+
                 except ResultError as e:
-                    
+
                     # if the column already exists, get the column from the database
                     if "Failed to create column" in e.args[0]:
                         # get col from database
                         col = ctx.columns.get(col_name.lower())
 
-                        print(f"Failed to create {col_name} column, already in namespace {namespace}")
-                        print("Using existing column")
+                        log.info(
+                            f"Failed to create {col_name} column, already in namespace {namespace}"
+                        )
+                        log.info("Using existing column")
                         table_cols.append(col)
                         if redundant_name is not None:
                             redundant_columns[redundant_name] = col
                     else:
                         raise e
-                
 
             log.info("Creating column set for Table %s...", table)
             try:
@@ -238,9 +245,12 @@ def create_columns(namespace: str, year: str):
                 )
             except ResultError as e:
                 if "Failed to create column set" in e.args[0]:
-                    print(f"Failed to create {table.lower()} column set, already exists")
+                    log.info(
+                        f"Failed to create {table.lower()} column set, already exists"
+                    )
                 else:
                     raise e
+
 
 if __name__ == "__main__":
     config_logger(log)

@@ -1,14 +1,20 @@
 """Loads Census PL 94-171 tables P1 through P4 from the Census API."""
+
 import logging
 import os
 
 import click
 import httpx
 import pandas as pd
+import sys
 from gerrydb import GerryDB
 from gerrydb_etl import config_logger
-from gerrydb_etl.bootstrap.pl_config import (AUXILIARY_LEVELS, LEVELS,
-                                             MISSING_DATASETS, MissingDataset)
+from gerrydb_etl.bootstrap.pl_config import (
+    AUXILIARY_LEVELS,
+    LEVELS,
+    MISSING_DATASETS,
+    MissingDataset,
+)
 
 try:
     from gerrydb_etl.db import DirectTransactionContext
@@ -50,7 +56,7 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
 
     https://www.census.gov/content/dam/Census/data/developers/api-user-guide/api-guide.pdf
     https://api.census.gov/data.html
-    
+
     """
     if MissingDataset(fips=fips, level=level, year=year) in MISSING_DATASETS:
         log.warning("Dataset not published by Census. Nothing to do.")
@@ -92,9 +98,14 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         query = {"in": f"state:{fips}", "for": "county subdivision:*"}
         id_cols = ("state", "county", "county subdivision")
     elif level == "aiannh":
-        query = {"for": f"american indian area/alaska native area/hawaiian home land (or part):*", "in":f"state:{fips}"}
-        id_cols = ("american indian area/alaska native area/hawaiian home land (or part)",)
-        
+        query = {
+            "for": f"american indian area/alaska native area/hawaiian home land (or part):*",
+            "in": f"state:{fips}",
+        }
+        id_cols = (
+            "american indian area/alaska native area/hawaiian home land (or part)",
+        )
+
     else:
         raise ValueError("Unknown level.")
 
@@ -105,28 +116,58 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         for alias in col.aliases:
             col_aliases[alias] = col
 
-    # to handle server side errors, try reloading
-    try:
-        # params are Query parameters to include in the URL, 
-        # as a string, dictionary, or sequence of two-tuples.
-        response = httpx.get(
-            url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
-        )
-        response.raise_for_status()
-    except:
-        response = httpx.get(
-            url=SOURCE_URL.format(year=year), params={**base_params, **query}, timeout=300
-        )
-        response.raise_for_status()
+    response_complete = False
+
+    request_url = SOURCE_URL.format(year=year)
+
+    log.info(f"Sending request to {request_url} ...", flush=True)
+    try_count = 0
+    while try_count < 5 and not response_complete:
+        try_count += 1
+        try:
+            response = httpx.get(
+                url=request_url,
+                params={**base_params, **query},
+                timeout=None,
+            )
+            log.info(f"Got response from url {response.request.url} ...")
+            response_complete = True
+
+        except Exception as e:
+            if try_count < 3:
+                log.info(
+                    f"\tIssue in {fips}. Retrying {try_count} ...",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            else:
+                log.error(
+                    f"ERROR in {fips}. Failed to get response from url {request_url}. Found error {e}.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+    response.raise_for_status()
 
     rows = response.json()
     table_df = pd.DataFrame.from_records(rows[1:], columns=rows[0])
+
+    # Some geographies have a '/' in the geoid, which will mess up the path, so we remove it
+    # and replace all instances of '/' with '--' in the dataframe
+    table_df = table_df.applymap(
+        lambda x: x.replace("/", "--") if isinstance(x, str) else x
+    )
+
     table_df["id"] = table_df[list(id_cols)].agg("".join, axis=1)
 
     if level in AUXILIARY_LEVELS:
         # since aiannh geographies cross state lines, the census subidivides the polygon but
         # uses the same geoid, we add the fips code to make the geoid unique
-        table_df["id"] = f"{level}:" + table_df["id"]+ f":fips{fips}" if level == "aiannh" else f"{level}:" + table_df["id"]
+        table_df["id"] = (
+            f"{level}:" + table_df["id"] + f":fips{fips}"
+            if level == "aiannh"
+            else f"{level}:" + table_df["id"]
+        )
 
     table_df = table_df.rename(columns={col: col.lower() for col in table_df.columns})
     table_df = table_df.set_index("id")
@@ -142,7 +183,6 @@ def load_tables(namespace: str, year: str, table: str, level: str, fips: str):
         f"U.S. Census P.L. 94-171 Table {table}"
     )
 
-    
     if os.getenv("GERRYDB_BULK_IMPORT"):
         log.info(
             "Importing column data via bulk import mode (direct database access)..."
