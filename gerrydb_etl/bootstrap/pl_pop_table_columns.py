@@ -180,6 +180,7 @@ def create_columns(namespace: str, year: str):
                 else:
                     col_name = prefix + canonical_name + suffix
 
+                col_name = col_name.replace(" ", "_")
                 log.info(
                     "Creating Table %s column %s (from %s) in namespace %s...",
                     table,
