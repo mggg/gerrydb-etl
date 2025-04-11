@@ -345,7 +345,7 @@ def load_geo(fips: str, level: str, year: str, namespace: str):
             ctx.load_dataframe(
                 df=layer_gdf,
                 columns=columns,
-                create_geo=True,
+                create_goes=True,
                 locality=root_loc,
                 layer=layer,
             )
