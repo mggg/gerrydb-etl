@@ -1,4 +1,5 @@
 """Imports localities for states, territories, and counties/county equivalents."""
+
 import logging
 import warnings
 from collections import Counter
@@ -6,7 +7,7 @@ from collections import Counter
 import click
 import geopandas as gpd
 import pandas as pd
-import us # package with tons of state metadata
+import us  # package with tons of state metadata
 
 from gerrydb import GerryDB
 from gerrydb.exceptions import ResultError
@@ -75,6 +76,7 @@ ALIAS_OVERRIDES = {
     "51515": ["va/city-of-bedford", "virginia/bedford-city", "va/bedford-city"],
 }
 
+
 # utm is Universal Transverse Mercator, it's one of 60 zones used for projections
 def utm_of_point(point):
     """Returns the UTM zone of a lat-long point."""
@@ -88,6 +90,7 @@ def identify_utm_zone(df):
         warnings.simplefilter("ignore", category=UserWarning)
         utm_counts = Counter(utm_of_point(point) for point in df["geometry"].centroid)
     return utm_counts.most_common(1)[0][0]
+
 
 # EPSG European Petroleum Survey Group codes, used for identifying projection systems
 def utm_zone_proj(zone: int) -> str:
@@ -108,12 +111,14 @@ def utm_zone_proj(zone: int) -> str:
 
 
 # click is a library designed to create CLI (command line interface) programs
-# decorator, but nothing seems to be used here 
+# decorator, but nothing seems to be used here
 @click.command()
-@click.option("--suppress_existence", 
-              is_flag = True, 
-              flag_value  = True,
-              help="Handle 'path already exists' errors.")
+@click.option(
+    "--suppress_existence",
+    is_flag=True,
+    flag_value=True,
+    help="Handle 'path already exists' errors.",
+)
 def load_localities(suppress_existence: bool):
     """Imports localities for states, territories, and counties/county equivalents."""
 
@@ -164,11 +169,14 @@ def load_localities(suppress_existence: bool):
         # will raise ResultError if path already exists
         try:
             ctx.localities.create(
-                canonical_path="us", # short identifier
-                name="United States of America", # full name 
+                canonical_path="us",  # short identifier
+                name="United States of America",  # full name
             )
         except ResultError as e:
-            if suppress_existence and "Failed to create canonical path to new location(s)." in e.args[0]:
+            if (
+                suppress_existence
+                and "Failed to create canonical path to new location(s)." in e.args[0]
+            ):
                 print("U.S. Path already exists.")
                 pass
             else:
@@ -181,7 +189,7 @@ def load_localities(suppress_existence: bool):
             log.info("Creating locality for state/territory %s...", state.name)
 
             # access all counties in state
-            state_gdf = counties_gdf[counties_gdf["STATEFP"] == state.fips] 
+            state_gdf = counties_gdf[counties_gdf["STATEFP"] == state.fips]
 
             # identifies modal utm zone (locality could cross several)
             zone = identify_utm_zone(state_gdf)
@@ -189,11 +197,14 @@ def load_localities(suppress_existence: bool):
             # LocalityCreate stores info about the locality (but notably not the underlying geography!)
             state_like_locs.append(
                 LocalityCreate(
-                    canonical_path=pathify(state.name), #GerryPath constrained string
-                    parent_path="us", # GerryPath constrained string, probably denotes hierarchy
-                    name=state.name, #name of locality
-                    aliases=[state.fips, state.abbr.lower()], # aliases is a list of GerryPath constrained strings
-                    default_proj=utm_zone_proj(zone), # default geoegraphic projection
+                    canonical_path=pathify(state.name),  # GerryPath constrained string
+                    parent_path="us",  # GerryPath constrained string, probably denotes hierarchy
+                    name=state.name,  # name of locality
+                    aliases=[
+                        state.fips,
+                        state.abbr.lower(),
+                    ],  # aliases is a list of GerryPath constrained strings
+                    default_proj=utm_zone_proj(zone),  # default geoegraphic projection
                 )
             )
 
@@ -204,8 +215,6 @@ def load_localities(suppress_existence: bool):
         # TODO unclear on how this actually ends up in the database
 
         ctx.localities.create_bulk(state_like_locs)
-        
-
 
     # us module has these built in under mapping method, but parker
     # is being intentional about DC
@@ -264,12 +273,13 @@ def load_localities(suppress_existence: bool):
         log.info(
             "Pushing localities for %d counties/county equivalents...", len(county_locs)
         )
-        
+
         ctx.localities.create_bulk(county_locs)
-        
 
 
 # meant to say this program is meant to be run, not part of library/package
 if __name__ == "__main__":
-    config_logger(log) # Configures a logger to write to `stderr`, from gerrydb_etl.__init__
+    config_logger(
+        log
+    )  # Configures a logger to write to `stderr`, from gerrydb_etl.__init__
     load_localities()

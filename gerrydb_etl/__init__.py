@@ -16,7 +16,6 @@ COLUMN_TYPE_TO_PY_TYPE = {
     ColumnType.FLOAT: float,
     ColumnType.INT: int,
     ColumnType.STR: str,
-    # ColumnType.JSON excluded (does not map to a fixed Python type)
 }
 
 log = logging.getLogger()
@@ -36,7 +35,19 @@ def download_dataframe_with_hash(
 ) -> Tuple[gpd.GeoDataFrame, str]:
     """Returns a (Geo)DataFrame and a file hash from a downloaded file."""
     log.info("Downloading %s...", url)
-    response = httpx.get(url)
+    # The census has started blocking requests from httpx, so we need to pretend to be a browser.
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/110.0.5481.77 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
+    response = httpx.get(url, headers=headers)
     response.raise_for_status()
 
     content = BytesIO(response.content)
