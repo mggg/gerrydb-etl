@@ -13,22 +13,29 @@
 # [1] https://www2.census.gov/geo/pdfs/maps-data/data/tiger/tgrshp2020pl/TGRSHP2020PL_TechDoc.pdf
 source_url: https://www2.census.gov/geo/tiger/TIGER2020PL/
 columns:
+- source: res_trust_class
+  target: res_trust_class
+  aliases: ["res_trust_class{{yr}}"]
+  type: str
+  kind: identifier
+  description: {{year}} reservation, trust, or union of both. Not originally from Census. Read docs.
 - source: NAME{{yr}}
   target: name
   aliases: ["name{{yr}}"]
   type: str
   kind: identifier
   description: {{year}} Census area name 
-- source: AIANNHNS{{yr}}
-  target: aiannh_gnis_code
-  aliases: ["aiannhns", "aiannhns{{yr}}"]
-  type: str
-  kind: identifier
-  units: ["aiannh"]
-  description: >
-    {{year}} Census AIANNH area GNIS code.
+# no longer importing
+# - source: AIANNHNS{{yr}}
+#   target: aiannh_gnis_code
+#   aliases: ["aiannhns", "aiannhns{{yr}}"]
+#   type: str
+#   kind: identifier
+#   units: ["aiannh"]
+#   description: >
+#     {{year}} Census AIANNH area GNIS code.
     
-    [GNIS](https://www.usgs.gov/tools/geographic-names-information-system-gnis) is a standard published by the USGS (United States Geological Survey).
+#     [GNIS](https://www.usgs.gov/tools/geographic-names-information-system-gnis) is a standard published by the USGS (United States Geological Survey).
 - source: COUNTYNS{{yr}}
   target: county_gnis_code
   aliases: ["countyns", "countyns{{yr}}"]
@@ -75,13 +82,15 @@ columns:
   type: str
   kind: identifier
   description: {{year}} Census name and translated legal/statistical area description 
-- source: AIANNHR10
-  target: aiannh_area_recognition
-  aliases: ["aiannhr", "aiannhr{{yr}}"]
-  type: str
-  kind: categorical
-  units: ["aiannh"]
-  description: {{year}} Census AIANNH area federal/state recognition flag
+
+# no longer importing
+# - source: AIANNHR10
+#   target: aiannh_area_recognition
+#   aliases: ["aiannhr", "aiannhr{{yr}}"]
+#   type: str
+#   kind: categorical
+#   units: ["aiannh"]
+#   description: {{year}} Census AIANNH area federal/state recognition flag
 - source: FUNCSTAT{{yr}}
   target: functional_status
   aliases: ["funcstat", "funcstat{{yr}}"]

@@ -3,8 +3,9 @@
 This is suitable only for very large bootstrapping/bulk import operations,
 such as importing the entire PL 94-171 release. Its primary advantages are
 the avoidance of serialization/REST/caching overhead, and--more importantly--
-support for large-scale transactions. 
+support for large-scale transactions.
 """
+
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,10 +15,9 @@ import pandas as pd
 from gerrydb_meta.crud import obj_meta
 from gerrydb_meta.crud.column import COLUMN_TYPE_TO_VALUE_COLUMN
 from gerrydb_meta.enums import ColumnType
-from gerrydb_meta.models import (ColumnValue, DataColumn, Geography,
-                                 ObjectMeta, User)
+from gerrydb_meta.models import ColumnValue, DataColumn, Geography, ObjectMeta, User
 from gerrydb_meta.schemas import ObjectMetaCreate
-from sqlalchemy import create_engine, insert, update
+from sqlalchemy import create_engine, insert, update, tuple_
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -85,7 +85,6 @@ class DirectTransactionContext:
         for col_name, col in cols.items():
             # Validate column data.
             val_column = COLUMN_TYPE_TO_VALUE_COLUMN[col.type]
-            rows = []
             validation_errors = []
             values = df[col_name]
             for geo_id, value in values.items():
@@ -117,27 +116,32 @@ class DirectTransactionContext:
         if validation_errors:
             raise ValueError(errors=validation_errors)
 
-        # Add the new column values and invalidate the old ones where present.
-        stale_values = (
-            self.db.query(ColumnValue.val_id)
-            .filter(
-                ColumnValue.col_id.in_(col.col_id for col in cols.values()),
-                ColumnValue.geo_id.in_(geo.geo_id for geo in geos.values()),
-                ColumnValue.valid_to.is_(None),
+        geo_ids = [geo.geo_id for geo in geos.values()]
+        col_ids = [col.col_id for col in cols.values()]
+        stale_values = []
+
+        for col_id in col_ids:
+            result = (
+                self.db.query(ColumnValue.col_id, ColumnValue.geo_id)
+                .filter(
+                    ColumnValue.geo_id.in_(geo_ids),
+                    ColumnValue.col_id == col_id,
+                    ColumnValue.valid_to.is_(None),
+                )
+                .all()
             )
-            .all()
-        )
+            stale_values.extend(result)
 
         with self.db.begin(nested=True):
             # Optimization: most column values are only set once, so we don't
             # need to invalidate old versions unless we previously detected them.
             if stale_values:
+                stale_pairs = [(val.col_id, val.geo_id) for val in stale_values]
                 self.db.execute(
                     update(ColumnValue)
                     .where(
-                        ColumnValue.val_id.in_(val.val_id for val in stale_values),
+                        tuple_(ColumnValue.col_id, ColumnValue.geo_id).in_(stale_pairs)
                     )
                     .values(valid_to=now)
                 )
-
             self.db.execute(insert(ColumnValue), rows)

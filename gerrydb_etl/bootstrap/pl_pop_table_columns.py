@@ -1,4 +1,5 @@
 """Creates columns for Census PL 94-171 tables P1 through P4."""
+
 import logging
 from typing import Optional
 
@@ -6,6 +7,7 @@ import click
 import httpx
 from gerrydb import GerryDB
 from gerrydb_etl import config_logger
+from gerrydb.exceptions import ResultError
 
 log = logging.getLogger()
 
@@ -158,10 +160,11 @@ def create_columns(namespace: str, year: str):
                 canonical_name,
                 col_is_hispanic,
             ) in variables.items():
+
+                # if column is redundant
                 if census_name in REDUNDANT_COLUMN_TO_CANONICAL_COLUMN:
                     log.info("Skipping column %s (redundant)...", census_name)
-                    # Eventually include the skipped column in the column set
-                    # for the Census table.
+                    # use the column that corresponds to redundant
                     table_cols.append(redundant_columns[census_name])
                     continue
 
@@ -177,6 +180,7 @@ def create_columns(namespace: str, year: str):
                 else:
                     col_name = prefix + canonical_name + suffix
 
+                col_name = col_name.replace(" ", "_")
                 log.info(
                     "Creating Table %s column %s (from %s) in namespace %s...",
                     table,
@@ -196,26 +200,57 @@ def create_columns(namespace: str, year: str):
                 else:
                     redundant_name = None
 
-                col = ctx.columns.create(
-                    col_name.lower(),
-                    aliases=[alias.lower() for alias in aliases],
-                    column_kind="count",
-                    column_type="int",
-                    description=(
-                        f"{year} U.S. Census {col_description}: " + demographic
-                    ),
-                    source_url=table_urls[table],
-                )
-                table_cols.append(col)
-                if redundant_name is not None:
-                    redundant_columns[redundant_name] = col
+                try:
+                    # try to create the column
+                    log.debug(f"making the column {col_name.lower()}")
+                    log.debug(
+                        f"\tdescription: {year} U.S. Census {col_description}: {demographic}"
+                    )
+                    col = ctx.columns.create(
+                        col_name.lower(),
+                        aliases=[alias.lower() for alias in aliases],
+                        column_kind="count",
+                        column_type="int",
+                        description=(
+                            f"{year} U.S. Census {col_description}: " + demographic
+                        ),
+                        source_url=table_urls[table],
+                    )
+                    table_cols.append(col)
+                    if redundant_name is not None:
+                        redundant_columns[redundant_name] = col
+
+                except ResultError as e:
+
+                    # if the column already exists, get the column from the database
+                    if "Failed to create column" in e.args[0]:
+                        # get col from database
+                        col = ctx.columns.get(col_name.lower())
+
+                        log.info(
+                            f"Failed to create {col_name} column, already in namespace {namespace}"
+                        )
+                        log.info("Using existing column")
+                        table_cols.append(col)
+                        if redundant_name is not None:
+                            redundant_columns[redundant_name] = col
+                    else:
+                        raise e
 
             log.info("Creating column set for Table %s...", table)
-            ctx.column_sets.create(
-                path=table.lower(),
-                columns=table_cols,
-                description=f"{year} U.S. Census P.L. 94-171 Table {table}",
-            )
+            try:
+                ctx.column_sets.create(
+                    path=table.lower(),
+                    columns=table_cols,
+                    description=f"{year} U.S. Census P.L. 94-171 Table {table}",
+                )
+            except ResultError as e:
+                if "Failed to create column set" in e.args[0]:
+                    log.info(
+                        f"Failed to create {table.lower()} column set, already exists"
+                    )
+                else:
+                    raise e
 
 
 if __name__ == "__main__":
